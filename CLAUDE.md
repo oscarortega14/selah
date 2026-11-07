@@ -98,8 +98,9 @@ funciones nuevas.) Por comentarios de los probadores:
   llegarle a otro PC.
 Hecho: iPhone build 2.6.0 (20600) subido a App Store Connect; AAB 2.6.0 (20600) en
 `~/Desktop/Selah Remoto - Google Play/`, con textos de "Qué hay de nuevo" para cada tienda.
-Falta: enviar a revisión (App Store y Play, el dueño); en Windows: `packageMsi` + firma + GitHub Release
-y `packageMsix` → Partner Center "Start update" (con permiso del dueño).
+Estado (2026-11-07): App Store 2.6.0 (20600) enviada a revisión; Google Play AAB 2.6.0 subido a la prueba
+cerrada; GitHub Release v2.6.0 publicada desde el PC (MSI firmado y verificado, APK 20600 con la clave 7B:EE…);
+MSIX 2.6.0 → Partner Center "Start update".
 
 ## Cómo numerar versiones
 - 2.6.**x**: solo arreglos o cambios pequeños.
