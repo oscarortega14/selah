@@ -1,5 +1,6 @@
 package app.selah.desktop
 
+import app.selah.shared.cleanListName
 import app.selah.shared.forOldRemotes
 
 import app.selah.shared.ClientMessage
@@ -111,6 +112,11 @@ class RemoteServer(
                     call.respondText("El archivo es muy grande (máximo ${MAX_UPLOAD / 1_000_000} MB)", status = HttpStatusCode.PayloadTooLarge)
                     return@post
                 }
+                // Pocas subidas a la vez: cada una ocupa espacio temporal en el disco hasta terminar.
+                if (!uploadSlots.tryAcquire()) {
+                    call.respondText("Hay otras subidas en curso. Intenta en un momento.", status = HttpStatusCode.ServiceUnavailable)
+                    return@post
+                }
                 val tmpDir = kotlin.io.path.createTempDirectory("selah-subida").toFile()
                 try {
                     val tmp = File(tmpDir, name)
@@ -130,17 +136,25 @@ class RemoteServer(
                         }
                     }
                     if (total == 0L) { call.respondText("Llegó vacío", status = HttpStatusCode.BadRequest); return@post }
-                    if (library.announcementsBytes() + total > MAX_ANNOUNCEMENTS_BYTES) {
-                        call.respondText("La carpeta de anuncios está llena (máximo ${MAX_ANNOUNCEMENTS_BYTES / 1_000_000_000} GB). Borra algunos en el computador.", status = HttpStatusCode.InsufficientStorage)
+                    // Se cortó a medias (se cayó el Wi-Fi): no guardar una foto o video incompleto.
+                    if (declared != null && total != declared) {
+                        call.respondText("La subida se cortó. Intenta otra vez.", status = HttpStatusCode.BadRequest)
                         return@post
                     }
-                    library.addAnnouncements(listOf(tmp))
-                    Log.info("Anuncio subido desde $address: $name (${total / 1000} KB)")
+                    // Revisar el espacio y copiar de una vez (dos subidas al mismo tiempo no se pasan del límite).
+                    val saved = try {
+                        library.addAnnouncement(tmp, MAX_ANNOUNCEMENTS_BYTES)
+                    } catch (_: IllegalStateException) {
+                        call.respondText("La carpeta de anuncios está llena (máximo ${MAX_ANNOUNCEMENTS_BYTES / 1_000_000_000} GB). Borra algunos en el computador.", status = HttpStatusCode.InsufficientStorage)
+                        return@post
+                    } ?: name // ya estaba (mismo contenido)
+                    Log.info("Anuncio subido desde $address: $saved (${total / 1000} KB)")
                     call.respondText(ProtocolJson.encodeToString(kotlinx.serialization.json.JsonObject.serializer(),
-                        kotlinx.serialization.json.buildJsonObject { put("ok", kotlinx.serialization.json.JsonPrimitive(true)); put("nombre", kotlinx.serialization.json.JsonPrimitive(name)) }),
+                        kotlinx.serialization.json.buildJsonObject { put("ok", kotlinx.serialization.json.JsonPrimitive(true)); put("nombre", kotlinx.serialization.json.JsonPrimitive(saved)) }),
                         ContentType.Application.Json)
                 } finally {
                     tmpDir.deleteRecursively()
+                    uploadSlots.release()
                 }
             }
             // Páginas web: control remoto (/), vista de escenario y letras para OBS.
@@ -242,6 +256,7 @@ class RemoteServer(
     companion object {
         /** Tope de lo que se puede subir desde un celular (un video corto). */
         const val MAX_UPLOAD = 300_000_000L
+        private val uploadSlots = kotlinx.coroutines.sync.Semaphore(3)
 
         /** Tope de toda la carpeta de anuncios al subir desde la red (para que nadie llene el disco). */
         const val MAX_ANNOUNCEMENTS_BYTES = 5_000_000_000L

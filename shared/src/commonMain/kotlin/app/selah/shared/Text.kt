@@ -58,3 +58,26 @@ fun searchSongsFull(songs: Collection<Song>, query: String, limit: Int = 100): L
 }
 
 private fun Song.hit(snippet: String) = summary().let { SongHit(it.id, it.title, it.firstLine, snippet) }
+
+/**
+ * Los primeros [n] caracteres sin partir un emoji (u otro carácter de dos mitades): si el corte cae en medio,
+ * se deja fuera la mitad suelta (un nombre de archivo con media pareja falla o sale con basura).
+ */
+fun String.takeWhole(n: Int): String {
+    val cut = take(n)
+    return if (cut.isNotEmpty() && cut.last().isHighSurrogate()) cut.dropLast(1) else cut
+}
+
+/** Nombre seguro para archivo (sin / \\ : * ? " < > |), o null si queda vacío. Lo usan el PC y la demostración. */
+fun cleanListName(name: String): String? =
+    name.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""), "-").trim().trim('.').takeWhole(80).trim().ifEmpty { null }?.let(::avoidReservedName)
+
+/** Nombres que Windows reserva para dispositivos (CON, NUL, COM1…): un archivo así no se guarda. */
+private val RESERVED_NAMES = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+
+/** "CON" → "CON_", "nul.txt" → "nul_.txt". Los demás nombres no cambian. */
+fun avoidReservedName(name: String): String {
+    val stem = name.substringBefore('.')
+    return if (stem.trim().uppercase() in RESERVED_NAMES) stem + "_" + name.drop(stem.length) else name
+}
+

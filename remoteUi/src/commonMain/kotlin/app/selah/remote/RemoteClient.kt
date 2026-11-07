@@ -125,11 +125,13 @@ class RemoteClient(private val scope: CoroutineScope) {
     var onPinAccepted: (host: String, pin: String) -> Unit = { _, _ -> }
     @Volatile private var currentHost: String? = null
     @Volatile private var triedSavedPin = false
-    @Volatile private var pendingPin: String? = null
+    /** Clave enviada y aún sin respuesta, con el computador al que se le mandó (solo ese puede aceptarla). */
+    @Volatile private var pendingPin: Pair<String, String>? = null
 
     /** Mandar la clave que escribió el usuario. */
     fun login(pin: String) {
-        pendingPin = pin.trim()
+        val host = currentHost ?: return
+        pendingPin = host to pin.trim()
         queue.trySend(ClientMessage.Login(pin.trim()))
     }
 
@@ -186,10 +188,11 @@ class RemoteClient(private val scope: CoroutineScope) {
             while (isActive) {
                 _status.value = ConnectionStatus.Connecting(host)
                 try {
-                    http.webSocket(host = host, port = DEFAULT_PORT, path = WS_PATH) {
+                    http.webSocket(host = urlHost(host), port = DEFAULT_PORT, path = WS_PATH) {
                         _status.value = ConnectionStatus.Connected(host)
                         failures = 0
                         triedSavedPin = false
+                        pendingPin = null // una clave mandada a otra conexión no vale aquí
                         _auth.value = null
                         currentHost = host
                         // descartar órdenes que se acumularon mientras no había conexión
@@ -199,7 +202,8 @@ class RemoteClient(private val scope: CoroutineScope) {
                         val sender = launch { for (m in queue) send(Frame.Text(m.encode())) }
                         try {
                             for (frame in incoming) {
-                                if (frame is Frame.Text) onMessage(decodeServerMessage(frame.readText()))
+                                // Un mensaje que no se entiende (de un PC más nuevo, o dañado) se salta: no se corta la conexión.
+                                if (frame is Frame.Text) runCatching { decodeServerMessage(frame.readText()) }.getOrNull()?.let(::onMessage)
                             }
                         } finally {
                             sender.cancel()
@@ -234,7 +238,7 @@ class RemoteClient(private val scope: CoroutineScope) {
     /** Nombre del PC (consulta /info), o null si no responde. */
     suspend fun pcName(host: String): String? {
         return runCatching {
-            val text = http.get("http://$host:$DEFAULT_PORT/info").bodyAsText()
+            val text = http.get("http://${urlHost(host)}:$DEFAULT_PORT/info").bodyAsText()
             ProtocolJson.decodeFromString(DiscoveryReply.serializer(), text).name.ifBlank { null }
         }.getOrNull()
     }
@@ -247,7 +251,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         if (demo != null) return "En la demostración no se suben archivos: conéctate al computador con Selah"
         val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return "No hay conexión con el computador"
         return runCatching {
-            val response = http.post("http://$host:$DEFAULT_PORT/anuncios") {
+            val response = http.post("http://${urlHost(host)}:$DEFAULT_PORT/anuncios") {
                 url { parameters.append("nombre", file.name) }
                 header("X-Proyecta-Pin", savedPin(host).orEmpty())
                 setBody(object : io.ktor.http.content.OutgoingContent.ReadChannelContent() {
@@ -293,14 +297,15 @@ class RemoteClient(private val scope: CoroutineScope) {
             is ServerMessage.Error -> _errors.tryEmit(m.message)
             is ServerMessage.Auth -> {
                 if (m.ok) {
-                    val host = currentHost
-                    if (host != null) pendingPin?.let { onPinAccepted(host, it) }
+                    // Se guarda solo si la aceptó el mismo computador al que se le mandó.
+                    pendingPin?.takeIf { it.first == currentHost }?.let { (host, pin) -> onPinAccepted(host, pin) }
                     pendingPin = null
                 } else if (m.required && !triedSavedPin) {
                     // Primero se prueba la clave guardada, sin molestar al usuario.
                     triedSavedPin = true
                     val saved = currentHost?.let(savedPin)
-                    if (saved != null) { pendingPin = saved; queue.trySend(ClientMessage.Login(saved)); return }
+                    val host = currentHost
+                    if (saved != null && host != null) { pendingPin = host to saved; queue.trySend(ClientMessage.Login(saved)); return }
                 }
                 _auth.value = m
             }
@@ -312,3 +317,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         http.close()
     }
 }
+
+/** Una dirección IPv6 va entre corchetes en una URL ("[fe80::1]"); las demás, tal cual. */
+internal fun urlHost(host: String): String = if (':' in host && !host.startsWith("[")) "[$host]" else host
+

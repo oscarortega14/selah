@@ -1,5 +1,6 @@
 package app.selah.remote
 
+import app.selah.shared.cleanListName
 import app.selah.shared.Bible
 import app.selah.shared.BibleReference
 import app.selah.shared.ClientMessage
@@ -97,7 +98,7 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             ClientMessage.PlanNext -> if (plan.current + 1 < plan.items.size) planGo(plan.current + 1) else "No hay más elementos en la lista"
             ClientMessage.PlanClear -> { plan = ServicePlanState(); null }
             is ClientMessage.PlanSave -> {
-                val name = msg.name.trim().take(80)
+                val name = cleanListName(msg.name).orEmpty() // igual que el PC
                 when {
                     name.isEmpty() -> "Escribe un nombre para la lista"
                     plan.items.isEmpty() -> "La lista está vacía"

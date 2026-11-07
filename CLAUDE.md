@@ -46,6 +46,9 @@ cd iosApp && xcodegen                            # proyecto de Xcode
 - Commits con el correo privado de GitHub del dueño (`…@users.noreply.github.com`), ya configurado.
 - No cambiar ajustes de seguridad de los dispositivos de prueba (p. ej. "fuentes desconocidas").
 - Cada mejora lleva pruebas; lo visual se comprueba también en un dispositivo real cuando se puede.
+- Pruebas adversariales (`Adversarial*Test`): intentan romper Selah (red, archivos, lista/presentador, app del
+  celular). Las del celular (`remoteUi/src/androidUnitTest`) levantan un "PC" falso en `[::1]:8765`: correrlas
+  con Selah cerrado en ese equipo.
 - El PC es la única fuente de verdad: el operador, el control web y las apps mandan `ClientMessage`
   y reciben `ServerMessage.State`. Al agregar algo al protocolo, mantener compatibilidad con apps viejas
   (campos con valor por defecto; `Hello(features)`).

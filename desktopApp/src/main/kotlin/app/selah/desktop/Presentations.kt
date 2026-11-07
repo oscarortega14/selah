@@ -53,10 +53,12 @@ class Presentations(val dir: File) {
                     ImageIO.write(image, "png", File(out, pageName(index)))
                     ImageIO.write(thumbnail(image), "png", File(out, THUMB_PREFIX + pageName(index)))
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // También falta de memoria o un archivo que hace recursión infinita: un mensaje, no un cierre.
                 out.deleteRecursively()
                 Log.error("No pude convertir la presentación $name", e)
-                throw IllegalArgumentException("No pude abrir \"$name\": ${e.message ?: e::class.simpleName}")
+                val why = if (e is OutOfMemoryError) "es demasiado grande" else e.message ?: e::class.simpleName
+                throw IllegalArgumentException("No pude abrir \"$name\": $why")
             }
             if (count == 0) { out.deleteRecursively(); throw IllegalArgumentException("\"$name\" no tiene diapositivas") }
             stamp.writeText(expected)
@@ -80,7 +82,8 @@ class Presentations(val dir: File) {
         for (f in files.filter { it.isFile && isPresentation(it.name) }) {
             var target = File(dir, f.name)
             var i = 2
-            while (target.exists() && target.length() != f.length()) target = File(dir, "${f.nameWithoutExtension} ($i).${f.extension}").also { i++ }
+            // Mismo nombre y mismo contenido: ya está. Mismo nombre y otro contenido: "nombre (2).pdf".
+            while (target.exists() && !Library.sameContent(target, f)) target = File(dir, "${f.nameWithoutExtension} ($i).${f.extension}").also { i++ }
             if (!target.exists()) { f.copyTo(target); n++ }
         }
         return n
@@ -100,6 +103,8 @@ class Presentations(val dir: File) {
 
     companion object {
         const val WIDTH = 1920
+        /** Más que esto no es una presentación para un culto (y convertirla llenaría el disco). */
+        const val MAX_PAGES = 300
         /** Subirlo obliga a convertir todo de nuevo (si cambia la forma de dibujar). */
         private const val FORMAT_VERSION = 1
         val EXTENSIONS = setOf("pdf", "pptx")
@@ -124,7 +129,7 @@ class Presentations(val dir: File) {
         /** Nombre de carpeta seguro y distinto para cada archivo. */
         private fun cacheName(name: String) =
             name.substringBeforeLast('.').replace(Regex("[^\\p{L}\\p{N} _-]"), "_").take(60) + "-" +
-                Integer.toHexString(name.hashCode())
+                java.security.MessageDigest.getInstance("SHA-1").digest(name.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
 
         /** Dibuja cada diapositiva y se la pasa a [emit]. Devuelve cuántas hay. */
         fun render(src: File, emit: (Int, BufferedImage) -> Unit): Int = when (src.extension.lowercase()) {
@@ -136,6 +141,7 @@ class Presentations(val dir: File) {
         private fun renderPdf(src: File, emit: (Int, BufferedImage) -> Unit): Int {
             org.apache.pdfbox.Loader.loadPDF(src).use { doc ->
                 val renderer = org.apache.pdfbox.rendering.PDFRenderer(doc)
+                if (doc.numberOfPages > MAX_PAGES) throw IllegalArgumentException("tiene más de $MAX_PAGES páginas")
                 for (i in 0 until doc.numberOfPages) {
                     val box = doc.getPage(i).cropBox
                     // Ancho de 1920 px (sin pasarse en alto de 1920 si la página es vertical)
@@ -150,10 +156,13 @@ class Presentations(val dir: File) {
             src.inputStream().use { input ->
                 org.apache.poi.xslf.usermodel.XMLSlideShow(input).use { show ->
                     val size = show.pageSize
-                    val scale = WIDTH / size.width.toDouble()
-                    val h = (size.height * scale).toInt().coerceAtLeast(1)
+                    // Ni el ancho ni el alto pasan de 1920 px (una diapositiva muy alta pedía cientos de MB).
+                    val scale = minOf(WIDTH / size.width.toDouble(), WIDTH / size.height.toDouble())
+                    val w = (size.width * scale).toInt().coerceIn(1, WIDTH)
+                    val h = (size.height * scale).toInt().coerceIn(1, WIDTH)
+                    if (show.slides.size > MAX_PAGES) throw IllegalArgumentException("tiene más de $MAX_PAGES diapositivas")
                     show.slides.forEachIndexed { i, slide ->
-                        val img = BufferedImage(WIDTH, h, BufferedImage.TYPE_INT_RGB)
+                        val img = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
                         val g = img.createGraphics()
                         try {
                             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
@@ -162,7 +171,7 @@ class Presentations(val dir: File) {
                             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
                             g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON)
                             g.color = Color.WHITE
-                            g.fillRect(0, 0, WIDTH, h)
+                            g.fillRect(0, 0, w, h)
                             g.scale(scale, scale)
                             slide.draw(g)
                         } finally {

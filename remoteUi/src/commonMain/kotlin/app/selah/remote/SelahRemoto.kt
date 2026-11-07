@@ -33,9 +33,29 @@ fun parseConnectLink(url: String): ConnectLink? {
         if (i <= 0) null else p.substring(0, i) to decodeQuery(p.substring(i + 1))
     }.toMap()
     val host = params["host"]?.trim().orEmpty()
-    if (!host.matches(Regex("""^[0-9A-Za-z.\-:]{1,64}$"""))) return null
+    if (!isValidHost(host)) return null
     val pin = params["pin"]?.trim()?.takeIf { it.matches(Regex("""\d{4,6}""")) }
     return ConnectLink(host, pin)
+}
+
+/**
+ * Una dirección a la que se puede conectar: IPv4 o nombre ("192.168.1.20", "pc-iglesia.local"), o IPv6
+ * ("fe80::1" o "[fe80::1]"). Sin puerto, sin partes vacías ("a..b") ni cosas como ".." o "-".
+ */
+internal fun isValidHost(host: String): Boolean {
+    if (host.isEmpty() || host.length > 64) return false
+    val bare = host.removeSurrounding("[", "]")
+    if (':' in bare) {
+        // IPv6: grupos de 1-4 dígitos hex separados por ":", con a lo sumo un "::".
+        val parts = bare.split("::")
+        if (parts.size > 2 || bare.count { it == ':' } < 2) return false
+        return parts.all { half -> half.isEmpty() || half.split(':').all { g -> g.length in 1..4 && g.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' } } }
+    }
+    if (host.startsWith("[")) return false
+    return host.split('.').all { label ->
+        label.length in 1..63 && label.first() != '-' && label.last() != '-' &&
+            label.all { (it in '0'..'9') || (it in 'a'..'z') || (it in 'A'..'Z') || it == '-' }
+    }
 }
 
 private fun decodeQuery(s: String): String = buildString {
@@ -57,18 +77,24 @@ private fun decodeQuery(s: String): String = buildString {
  * Devuelve la dirección a la que hay que conectarse.
  */
 fun KeyValueStore.acceptLink(link: ConnectLink): String {
+    migrateLegacyPin()
     link.pin?.let { put("pin" to it, "pinHost" to link.host) }
     return link.host
 }
 
+/**
+ * La 2.4 guardaba la clave sin decir de qué computador era. Se ata, una sola vez y antes de que nada cambie
+ * "host", al computador que estaba guardado entonces. (Si no, la clave se le mandaría a cualquier PC nuevo.)
+ */
+internal fun KeyValueStore.migrateLegacyPin() {
+    if (get("pin") != null && get("pinHost") == null) get("host")?.takeIf { it.isNotEmpty() }?.let { put("pinHost" to it) }
+}
+
 /** Le enseña al cliente dónde está la clave guardada y la recuerda cuando el PC la acepta. */
 fun RemoteClient.useStore(store: KeyValueStore) {
+    store.migrateLegacyPin()
     // La clave se manda sola solo al computador donde se aceptó.
-    // (Las versiones anteriores no guardaban de qué computador era: vale para el que ya estaba guardado.)
-    savedPin = { host ->
-        val pinHost = store.get("pinHost") ?: store.get("host")
-        store.get("pin")?.takeIf { pinHost == host }
-    }
+    savedPin = { host -> store.get("pin")?.takeIf { store.get("pinHost") == host } }
     onPinAccepted = { host, pin -> store.put("pin" to pin, "pinHost" to host) }
     onHostChanged = { host -> store.put("host" to host) }
     store.get("host")?.takeIf { it.isNotEmpty() }?.let { connect(it) }

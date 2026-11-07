@@ -1,5 +1,6 @@
 package app.selah.desktop
 
+import app.selah.shared.cleanListName
 import app.selah.shared.ClientMessage
 import app.selah.shared.PlanItem
 import app.selah.shared.PlanKind
@@ -64,8 +65,10 @@ class ServicePlan(
     /** Guarda la lista actual en listas/<nombre>.json. Devuelve un mensaje de error o null. */
     @Synchronized
     fun saveAs(name: String): String? {
-        val clean = cleanListName(name) ?: return "Escribe un nombre para la lista"
+        val typed = cleanListName(name) ?: return "Escribe un nombre para la lista"
         if (_state.value.items.isEmpty()) return "La lista está vacía"
+        // En Windows (y en la Mac) "Lista" y "lista" son el mismo archivo: se usa el nombre que ya tenía.
+        val clean = scanSaved().firstOrNull { it.equals(typed, ignoreCase = true) } ?: typed
         val saved = _state.value.copy(current = -1, name = clean)
         val ok = runCatching {
             listsDir.mkdirs()
@@ -81,9 +84,10 @@ class ServicePlan(
     @Synchronized
     fun open(name: String): String? {
         // Solo una de las listas guardadas (nada de "../" para leer otros archivos).
-        if (name !in scanSaved()) return "No encontré la lista \"$name\""
-        val loaded = load(File(listsDir, "$name.json")) ?: return "No encontré la lista \"$name\""
-        update { loaded.copy(current = -1, name = name) }
+        val found = scanSaved().let { saved -> saved.firstOrNull { it == name } ?: saved.firstOrNull { it.equals(name, ignoreCase = true) } }
+            ?: return "No encontré la lista \"$name\""
+        val loaded = load(File(listsDir, "$found.json")) ?: return "No encontré la lista \"$name\""
+        update { loaded.copy(current = -1, name = found) }
         return null
     }
 
@@ -131,7 +135,8 @@ class ServicePlan(
             index == s.current -> -1
             else -> s.current
         }
-        ServicePlanState(s.items.filterIndexed { i, _ -> i != index }, current)
+        // copy: la lista conserva su nombre (para "Guardar" otra vez con el mismo).
+        s.copy(items = s.items.filterIndexed { i, _ -> i != index }, current = current)
     }
 
     /** Mueve un elemento; el "actual" sigue apuntando al mismo elemento. */
@@ -143,7 +148,23 @@ class ServicePlan(
             in minOf(from, to)..maxOf(from, to) -> if (from < to) s.current - 1 else s.current + 1
             else -> s.current
         }
-        ServicePlanState(items, current)
+        s.copy(items = items, current = current)
+    }
+
+    /**
+     * Una canción o predicación cambió de nombre en el editor (su id es el nombre del archivo):
+     * la lista actual y las guardadas pasan a apuntar al nombre nuevo.
+     */
+    @Synchronized
+    fun renamed(kind: PlanKind, oldId: String, newId: String, title: String) {
+        val newTitle = if (kind == PlanKind.SERMON) "Predicación: $title" else title
+        fun ServicePlanState.fixed() = copy(items = items.map { if (it.kind == kind && it.ref == oldId) it.copy(ref = newId, title = newTitle) else it })
+        update { it.fixed() }
+        for (f in listsDir.listFiles { f -> f.isFile && f.extension == "json" }.orEmpty()) {
+            val saved = load(f) ?: continue
+            val fixed = saved.fixed()
+            if (fixed != saved) runCatching { f.writeText(ProtocolJson.encodeToString(ServicePlanState.serializer(), fixed), Charsets.UTF_8) }
+        }
     }
 
     private fun update(f: (ServicePlanState) -> ServicePlanState) {
@@ -161,9 +182,6 @@ class ServicePlan(
     }.getOrNull()
 }
 
-/** Nombre seguro para archivo (sin / \\ : * ? " < > |), o null si queda vacío. */
-fun cleanListName(name: String): String? =
-    name.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""), "-").trim().trim('.').take(80).trim().ifEmpty { null }
 
 private val MONTHS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
@@ -175,6 +193,13 @@ fun suggestedListName(today: java.time.LocalDate = java.time.LocalDate.now()): S
 
 /** Reparte cada orden: lo de la lista a [ServicePlan], el resto al [Presenter]. */
 class Commands(val presenter: Presenter, val plan: ServicePlan, val history: History? = null) {
+    init {
+        presenter.renameListeners += { kind, oldId, newId, title ->
+            plan.renamed(if (kind == HistoryEntry.Kind.SERMON) PlanKind.SERMON else PlanKind.SONG, oldId, newId, title)
+            history?.renamed(kind, oldId, newId, title)
+        }
+    }
+
     /** Cambiar de traducción (Main también la guarda en ajustes). */
     var onSelectBible: (String) -> Unit = {}
     var onSelectSecondBible: (String?) -> Unit = {}
@@ -197,8 +222,8 @@ class Commands(val presenter: Presenter, val plan: ServicePlan, val history: His
             val history = History(File(library.baseDir, "historial.csv"))
             presenter.onShown = history::record
             return Commands(presenter, plan, history).apply {
-                onSelectBible = library::selectBible
-                onSelectSecondBible = library::selectSecondBible
+                onSelectBible = { library.selectBible(it) }
+                onSelectSecondBible = { library.selectSecondBible(it) }
             }
         }
     }

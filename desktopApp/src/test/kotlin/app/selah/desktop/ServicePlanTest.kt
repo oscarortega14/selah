@@ -1,5 +1,6 @@
 package app.selah.desktop
 
+import app.selah.shared.cleanListName
 import app.selah.shared.ClientMessage
 import app.selah.shared.PlanKind
 import java.io.File

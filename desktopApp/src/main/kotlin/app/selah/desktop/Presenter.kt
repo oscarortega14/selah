@@ -19,6 +19,16 @@ class Presenter(
     /** Se llama cada vez que se proyecta una canción o una lectura (para el historial). */
     var onShown: ((HistoryEntry.Kind, title: String, ref: String) -> Unit)? = null
 
+    /**
+     * Se llama cuando el editor le cambió el nombre (y con él el id = nombre de archivo) a una canción o
+     * predicación, para que la lista del culto y el historial sigan apuntando a ella.
+     */
+    val renameListeners = mutableListOf<(kind: HistoryEntry.Kind, oldId: String, newId: String, title: String) -> Unit>()
+
+    private fun notifyRenamed(kind: HistoryEntry.Kind, oldId: String?, newId: String, title: String) {
+        if (oldId != null && oldId != newId) renameListeners.forEach { it(kind, oldId, newId, title) }
+    }
+
     private val _state = MutableStateFlow(PresentationState())
     val state: StateFlow<PresentationState> = _state.asStateFlow()
 
@@ -70,6 +80,7 @@ class Presenter(
      */
     fun songSaved(oldId: String?, newId: String) {
         val song = library.song(newId) ?: return
+        notifyRenamed(HistoryEntry.Kind.SONG, oldId, newId, song.title)
         _state.update { s ->
             val onScreen = !s.isBible && !s.sermon && s.songId != null && (s.songId == oldId || s.songId == newId)
             if (!onScreen) return@update s
@@ -111,6 +122,7 @@ class Presenter(
     /** Tras guardar una predicación en el editor: si está en pantalla, se actualiza sin moverse. */
     fun sermonSaved(oldId: String?, newId: String) {
         val sermon = library.sermon(newId) ?: return
+        notifyRenamed(HistoryEntry.Kind.SERMON, oldId, newId, sermon.title)
         _state.update { s ->
             if (!s.sermon || (s.songId != oldId && s.songId != newId)) return@update s
             val slides = app.selah.shared.Sermon.expand(sermon, library.bible).slides

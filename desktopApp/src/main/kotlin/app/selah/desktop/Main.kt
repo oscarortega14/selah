@@ -53,8 +53,8 @@ fun main() {
     }
     val commands = Commands.create(library).apply {
         // Elegir traducción (desde el PC o un remoto): se cambia y se recuerda.
-        onSelectBible = { name -> library.selectBible(name); settingsStore.update { it.copy(bible = name) } }
-        onSelectSecondBible = { name -> library.selectSecondBible(name); settingsStore.update { it.copy(secondBible = name) } }
+        onSelectBible = { name -> if (library.selectBible(name)) settingsStore.update { it.copy(bible = name) } }
+        onSelectSecondBible = { name -> if (library.selectSecondBible(name)) settingsStore.update { it.copy(secondBible = name) } }
     }
     val presenter = commands.presenter
     // Clave para controlar desde la red: se crea sola la primera vez (se puede cambiar o quitar).

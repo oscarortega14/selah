@@ -117,7 +117,16 @@ object SongImport {
     /** Líneas de un <lines>: <br/> corta la línea; los acordes y comentarios no se proyectan. */
     private fun linesOf(lines: Element): List<String> {
         val sb = StringBuilder()
-        fun walk(n: Node) {
+        // Recorrido con una pila propia (no recursivo): un XML anidado 10.000 niveles no agota la pila.
+        val stack = ArrayDeque<Node>()
+        fun pushChildren(n: Node) {
+            val kids = mutableListOf<Node>()
+            var c = n.firstChild; while (c != null) { kids += c; c = c.nextSibling }
+            for (k in kids.asReversed()) stack.addLast(k)
+        }
+        pushChildren(lines)
+        while (stack.isNotEmpty()) {
+            val n = stack.removeLast()
             when {
                 n.nodeType == Node.TEXT_NODE || n.nodeType == Node.CDATA_SECTION_NODE -> sb.append(n.nodeValue)
                 n.nodeType == Node.ELEMENT_NODE && n.localName == "br" -> sb.append('\u0000')
@@ -125,13 +134,11 @@ object SongImport {
                 // Acordes de OpenLyrics → formato ChordPro "[D]" (los músicos los ven en la vista de escenario)
                 n.nodeType == Node.ELEMENT_NODE && n.localName == "chord" -> {
                     (n as Element).getAttribute("name").trim().takeIf { it.isNotEmpty() }?.let { sb.append('[').append(it).append(']') }
-                    var c = n.firstChild; while (c != null) { walk(c); c = c.nextSibling }
+                    pushChildren(n)
                 }
-                else -> { var c = n.firstChild; while (c != null) { walk(c); c = c.nextSibling } }
+                else -> pushChildren(n)
             }
         }
-        var c = lines.firstChild
-        while (c != null) { walk(c); c = c.nextSibling }
         return sb.toString().replace(Regex("\\s+"), " ").split('\u0000').map { it.trim() }.filter { it.isNotEmpty() }
     }
 

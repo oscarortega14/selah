@@ -68,7 +68,9 @@ class Backups(
                 val name = e.name.replace('\\', '/')
                 if (INCLUDED.none { name == it || name.startsWith("$it/") }) continue
                 val target = File(baseDir, name).canonicalFile
-                if (!target.path.startsWith(root.path + File.separator)) continue // nada de "../"
+                // Ya resuelto (sin "../"), tiene que seguir siendo uno de los incluidos: "canciones/../ajustes.json" no.
+                val allowed = INCLUDED.any { inc -> File(root, inc).canonicalFile.let { target == it || target.path.startsWith(it.path + File.separator) } }
+                if (!allowed) continue
                 target.parentFile.mkdirs()
                 z.getInputStream(e).use { input -> target.outputStream().use { input.copyTo(it) } }
                 n++

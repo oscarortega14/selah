@@ -1,5 +1,7 @@
 package app.selah.desktop
 
+import app.selah.shared.takeWhole
+import app.selah.shared.cleanListName
 import app.selah.shared.Bible
 import app.selah.shared.Song
 import app.selah.shared.SongParser
@@ -192,9 +194,9 @@ class Library(val baseDir: File) {
                 src.extension.equals("zip", true) -> java.util.zip.ZipFile(src).use { zip ->
                     zip.entries().asSequence()
                         .filter { !it.isDirectory && isSongSource(it.name) && !it.name.contains("__MACOSX") }
-                        .forEach { e -> takeFile(e.name.substringAfterLast('/'), zip.getInputStream(e).readBytes()) }
+                        .forEach { e -> takeFile(e.name.substringAfterLast('/'), zip.getInputStream(e).use { readLimited(it, MAX_SONG_BYTES, e.name) }) }
                 }
-                isSongSource(src.name) -> takeFile(src.name, src.readBytes())
+                isSongSource(src.name) -> takeFile(src.name, src.inputStream().use { readLimited(it, MAX_SONG_BYTES, src.name) })
             }
         }
         reload()
@@ -256,16 +258,21 @@ class Library(val baseDir: File) {
 
     /** Cambiar de traducción (se recuerda en [preferredBible]). */
     @Synchronized
-    fun selectBible(name: String) {
+    fun selectBible(name: String): Boolean {
+        // Solo una de las que hay (un nombre inventado desde la red no cambia la Biblia en uso).
+        if (name !in _catalog.value.bibleNames) return false
         preferredBible = name
         refreshBible(_catalog.value.songs)
+        return true
     }
 
     /** Elegir la segunda traducción (null = ninguna). */
     @Synchronized
-    fun selectSecondBible(name: String?) {
+    fun selectSecondBible(name: String?): Boolean {
+        if (name != null && name !in _catalog.value.bibleNames) return false
         preferredSecondBible = name
         refreshBible(_catalog.value.songs)
+        return true
     }
 
     private fun refreshBible(songs: List<SongSummary>) {
@@ -293,17 +300,28 @@ class Library(val baseDir: File) {
 
     /** Copia imágenes o videos a la carpeta de anuncios. Devuelve cuántos se agregaron. */
     @Synchronized
-    fun addAnnouncements(files: List<File>): Int {
+    fun addAnnouncements(files: List<File>): Int = files.count { addAnnouncement(it) != null }
+
+    /**
+     * Copia un anuncio. Si ya hay uno con ese nombre y el MISMO contenido, no se repite (devuelve null);
+     * si el contenido es otro (aunque pese igual), se guarda como "nombre (2).jpg". Devuelve el nombre final.
+     * [maxFolderBytes]: no copiar si la carpeta pasaría de ese tamaño (se revisa y copia sin que otra
+     * subida se meta en medio). Lanza IllegalStateException si no cabe.
+     */
+    @Synchronized
+    fun addAnnouncement(f: File, maxFolderBytes: Long = Long.MAX_VALUE): String? {
+        if (!f.isFile || !isMediaFile(f.name)) return null
         announcementsDir.mkdirs()
-        var n = 0
-        for (f in files.filter { it.isFile && isMediaFile(it.name) }) {
-            var target = File(announcementsDir, f.name)
-            var i = 2
-            while (target.exists() && target.length() != f.length()) target = File(announcementsDir, "${f.nameWithoutExtension} ($i).${f.extension}").also { i++ }
-            if (!target.exists()) { f.copyTo(target); n++ }
+        var target = File(announcementsDir, avoidReservedName(f.nameWithoutExtension) + "." + f.extension)
+        var i = 2
+        while (target.exists()) {
+            if (sameContent(target, f)) return null
+            target = File(announcementsDir, "${f.nameWithoutExtension} ($i).${f.extension}").also { i++ }
         }
+        if (announcementsBytes() + f.length() > maxFolderBytes) throw IllegalStateException("sin espacio")
+        f.copyTo(target)
         refreshAnnouncements()
-        return n
+        return target.name
     }
 
     /** Lo que ocupa la carpeta de anuncios. */
@@ -385,7 +403,8 @@ class Library(val baseDir: File) {
 
         /** Lee una Biblia según su formato (por la extensión del archivo). */
         fun parseBible(text: String, extension: String, name: String): Bible = when (extension.lowercase()) {
-            "json" -> Bible.fromJson(text, name)
+            // El nombre es siempre el del archivo (así se puede quitar, y un JSON no se hace pasar por otra).
+            "json" -> Bible.fromJson(text, name).let { Bible(name, it.books) }
             "xml" -> Bible.fromZefania(text, name)
             else -> Bible.fromVpl(text, name)
         }
@@ -410,7 +429,14 @@ class Library(val baseDir: File) {
         /** Reina-Valera 1909 (dominio público) incluida en el programa. */
         val bundledBible: Bible? get() = bundled("Reina-Valera 1909")
 
-        fun decodeSmart(bytes: ByteArray): String = try {
+        fun decodeSmart(bytes: ByteArray): String = when {
+            // "Unicode" del Bloc de notas (UTF-16 con su marca al inicio)
+            bytes.size >= 2 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte() -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
+            bytes.size >= 2 && bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte() -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
+            else -> decodeUtf8OrAnsi(bytes)
+        }.removePrefix("\uFEFF")
+
+        private fun decodeUtf8OrAnsi(bytes: ByteArray): String = try {
             Charsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -418,6 +444,24 @@ class Library(val baseDir: File) {
         } catch (_: CharacterCodingException) {
             String(bytes, Charset.forName("windows-1252"))
         }.removePrefix("\uFEFF")
+
+        /** Tope de un archivo de canciones (un .json de Holyrics con cientos de canciones cabe de sobra). */
+        const val MAX_SONG_BYTES = 20_000_000
+
+        /**
+         * Lee hasta [max] bytes; si hay más, lanza IllegalArgumentException (un .zip de 1 MB que se
+         * descomprime en 1 GB agotaba la memoria en pleno culto).
+         */
+        fun readLimited(input: java.io.InputStream, max: Int, name: String): ByteArray {
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) return out.toByteArray()
+                if (out.size() + n > max) throw IllegalArgumentException("\"${name.substringAfterLast('/')}\" es demasiado grande")
+                out.write(buf, 0, n)
+            }
+        }
 
         /** Lo que se puede importar: .txt (Selah), .xml (OpenLyrics/OpenLP), .json (Holyrics) y .zip con esos. */
         val IMPORT_EXTENSIONS = setOf("txt", "xml", "json")
@@ -430,19 +474,18 @@ class Library(val baseDir: File) {
 
         /** "Salmo 2:7" -> "Salmo 2-7": caracteres que Windows no permite en nombres de archivo. */
         fun fileNameFor(title: String): String =
-            title.replace(FORBIDDEN, "-").replace(Regex("\\s+"), " ").trim().trimEnd('.').take(100).trim()
+            avoidReservedName(title.replace(FORBIDDEN, "-").replace(Regex("\\s+"), " ").trim().trimEnd('.').takeWhole(100).trim())
 
-        /** Lee UTF-8; si el archivo fue guardado en ANSI (Bloc de notas viejo), usa Windows-1252. */
-        fun readTextSmart(f: File): String {
-            val bytes = f.readBytes()
-            return try {
-                Charsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes)).toString()
-            } catch (_: CharacterCodingException) {
-                String(bytes, Charset.forName("windows-1252"))
-            }.removePrefix("﻿")
+        /** Lee UTF-8, UTF-16 ("Unicode" del Bloc de notas) o ANSI (Windows-1252), según el archivo. */
+        fun readTextSmart(f: File): String = decodeSmart(f.readBytes())
+
+        internal fun sameContent(a: File, b: File): Boolean {
+            if (a.length() != b.length()) return false
+            a.inputStream().buffered().use { x -> b.inputStream().buffered().use { y ->
+                while (true) { val c = x.read(); if (c != y.read()) return false; if (c < 0) return true }
+            } }
         }
+
+        fun avoidReservedName(name: String): String = app.selah.shared.avoidReservedName(name)
     }
 }

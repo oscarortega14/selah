@@ -62,7 +62,7 @@ class ServerTest {
         val songs = library.catalog.value.songs
         assertEquals(listOf("Beta", "Canción Alfa"), songs.map { it.title })
         assertEquals("Aquí está", songs[1].firstLine)
-        assertEquals("Test", library.catalog.value.bibleName)
+        assertEquals("rv", library.catalog.value.bibleName) // una Biblia .json se llama como su archivo
     }
 
     @Test

@@ -68,7 +68,7 @@ fun BackgroundsWindow(
     val images = remember(refresh) { library.backgrounds() }
     val videos = remember(refresh) { library.videos() }
     var message by remember { mutableStateOf<String?>(null) }
-    val songId = state.songId
+    val songId = state.songIdForBackground()
     val preview = if (state.current != null && !state.blank) state else SAMPLE
 
     fun setSongBackground(name: String?) {
@@ -298,3 +298,10 @@ private fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPoin
         Slider(value, onChange, valueRange = range, enabled = enabled)
     }
 }
+
+/**
+ * La canción en pantalla a la que se le puede poner "fondo propio", o null. Con una predicación en pantalla
+ * songId es el id de la predicación: no hay que tocar una canción que se llame igual.
+ */
+internal fun app.selah.shared.PresentationState.songIdForBackground(): String? =
+    songId.takeIf { !sermon && !isBible && media == null && presentation == null }

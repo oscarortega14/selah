@@ -51,6 +51,18 @@ class History(
         _entries.value = _entries.value + entry
     }
 
+    /** Una canción o predicación cambió de nombre: sus registros pasan al nombre nuevo (no se parte en dos). */
+    @Synchronized
+    fun renamed(kind: HistoryEntry.Kind, oldRef: String, newRef: String, title: String) {
+        val list = _entries.value
+        if (list.none { it.kind == kind && it.ref == oldRef }) return
+        // Si ese día ya estaba con el nombre nuevo, cuenta una sola vez (como siempre: una vez por día).
+        val fixed = list.map { if (it.kind == kind && it.ref == oldRef) it.copy(ref = newRef, title = title) else it }
+            .distinctBy { Triple(it.date, it.kind, it.ref) }
+        _entries.value = fixed
+        runCatching { exportCsv(file) }
+    }
+
     /** Última fecha en que se cantó cada canción (por id). */
     fun lastSung(): Map<String, LocalDate> = _entries.value.asSequence()
         .filter { it.kind == HistoryEntry.Kind.SONG }
@@ -87,7 +99,7 @@ class History(
             val f = parseCsvLine(line)
             if (f.size < 5) return@mapNotNull null
             val kind = HistoryEntry.Kind.entries.firstOrNull { it.label == f[2] } ?: return@mapNotNull null
-            runCatching { HistoryEntry(LocalDate.parse(f[0]), f[1], kind, f[3], f[4]) }.getOrNull()
+            runCatching { HistoryEntry(LocalDate.parse(f[0]), f[1], kind, unescapeFormula(f[3]), unescapeFormula(f[4])) }.getOrNull()
         }
     }.getOrDefault(emptyList())
 
@@ -105,8 +117,19 @@ class History(
         internal fun toCsv(e: HistoryEntry) =
             listOf(e.date.toString(), e.time, e.kind.label, e.title, e.ref).joinToString(",") { csvField(it) }
 
-        private fun csvField(s: String) =
-            if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
+        /**
+         * Un campo para Excel. Si empieza con = + - @ (o tab / retorno), Excel lo tomaría como fórmula
+         * (un título importado como =HYPERLINK(…) se ejecutaría): se le antepone ' para que quede como texto.
+         */
+        private fun csvField(raw: String): String {
+            val s = if (raw.firstOrNull() in FORMULA_START) "'$raw" else raw
+            return if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
+        }
+
+        private val FORMULA_START = setOf('=', '+', '-', '@', '\t', '\r')
+
+        /** Al leer el historial: quita el ' que [csvField] le puso a un texto que empieza como fórmula. */
+        private fun unescapeFormula(s: String) = if (s.length > 1 && s[0] == '\'' && s[1] in FORMULA_START) s.substring(1) else s
 
         internal fun parseCsvLine(line: String): List<String> {
             val out = mutableListOf<String>()

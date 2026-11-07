@@ -4,6 +4,7 @@ import app.selah.shared.ServerMessage
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -42,10 +43,14 @@ class TranslationsTest {
         val hits = RemoteServer.bibleSearch(library, "luz") as ServerMessage.BibleResults
         assertTrue(hits.total > 0)
 
-        // Se mantiene al recargar la biblioteca; un nombre que ya no existe vuelve a la de por defecto
+        // Se mantiene al recargar la biblioteca; pedir una que no existe no cambia la que está en uso
         library.reload()
         assertEquals("Versión Biblia Libre", library.catalog.value.bibleName)
-        library.selectBible("No existe")
+        assertFalse(library.selectBible("No existe"))
+        assertEquals("Versión Biblia Libre", library.catalog.value.bibleName)
+        // Si la elegida desaparece de la carpeta (guardada en ajustes), se vuelve a la de por defecto
+        library.preferredBible = "Ya no está"
+        library.reload()
         assertEquals("Reina-Valera 1909", library.catalog.value.bibleName)
         dir.deleteRecursively()
     }

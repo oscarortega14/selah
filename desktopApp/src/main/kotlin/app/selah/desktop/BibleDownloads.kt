@@ -54,6 +54,9 @@ object BibleDownloads {
         ),
     )
 
+    /** Una Biblia completa en XML pesa ~10 MB; con este tope no cabe una "bomba" de zip. */
+    private const val MAX_BIBLE_BYTES = 60_000_000
+
     /** Dirección de descarga (formato VPL comprimido, ~4-6 MB). Se puede cambiar solo para las pruebas. */
     internal var baseUrl = "https://ebible.org/Scriptures/"
 
@@ -86,9 +89,9 @@ object BibleDownloads {
     fun addFromFile(library: Library, file: File): String {
         val ext = file.extension.lowercase()
         val (innerExt, text) = when (ext) {
-            "zip" -> textFromZip(file.readBytes(), preferVpl = false)
+            "zip" -> textFromZip(file.inputStream().use { Library.readLimited(it, MAX_BIBLE_BYTES, file.name) }, preferVpl = false)
                 ?: throw IllegalArgumentException("El .zip no trae una Biblia (.txt VPL, .xml Zefania o .json)")
-            in Library.BIBLE_EXTENSIONS -> ext to Library.readTextSmart(file)
+            in Library.BIBLE_EXTENSIONS -> ext to Library.decodeSmart(file.inputStream().use { Library.readLimited(it, MAX_BIBLE_BYTES, file.name) })
             else -> throw IllegalArgumentException("Formato no reconocido: usa .txt (VPL), .xml (Zefania), .json o .zip")
         }
         val name = suggestedName(file.nameWithoutExtension, text, innerExt, library)
@@ -128,7 +131,7 @@ object BibleDownloads {
                 val entry = zip.nextEntry ?: break
                 val name = entry.name.substringAfterLast('/')
                 if (entry.isDirectory || name.startsWith(".")) continue
-                if (name.substringAfterLast('.', "").lowercase() in Library.BIBLE_EXTENSIONS) found += name to zip.readBytes()
+                if (name.substringAfterLast('.', "").lowercase() in Library.BIBLE_EXTENSIONS) found += name to Library.readLimited(zip, MAX_BIBLE_BYTES, name)
             }
         }
         val pick = found.firstOrNull { it.first.endsWith("_vpl.txt", ignoreCase = true) }

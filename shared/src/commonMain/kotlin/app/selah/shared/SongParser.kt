@@ -34,6 +34,9 @@ object SongParser {
     private val CCLI_LINE = Regex("""^ccli\s*(?:#|n[ºo°.]*)?\s*:?\s*(\d{1,10})\s*$""", RegexOption.IGNORE_CASE)
     const val START_LABEL = "Inicio"
 
+    /** Ninguna canción real tiene tantas diapositivas; es el tope al repetir secciones con "Orden:". */
+    const val MAX_SLIDES = 500
+
     fun parse(id: String, text: String, fallbackTitle: String = id): Song {
         var title = fallbackTitle
         var titleFound = false
@@ -122,12 +125,15 @@ object SongParser {
         flush()
 
         val unknown = mutableListOf<String>()
-        val expanded = order.flatMap { name ->
+        val expanded = mutableListOf<Slide>()
+        for (name in order) {
             val g = groups[normalizeKey(name)]
-            if (g == null) { unknown += name; emptyList() } else {
-                // La primera diapositiva de cada repetición lleva la etiqueta (para los saltos).
-                listOf(g.first().copy(label = g.first().label.ifEmpty { START_LABEL })) + g.drop(1)
-            }
+            if (g == null) { unknown += name; continue }
+            // Un "Orden:" que repite miles de veces no debe armar millones de diapositivas.
+            if (expanded.size + g.size > MAX_SLIDES) break
+            // La primera diapositiva de cada repetición lleva la etiqueta (para los saltos).
+            expanded += g.first().copy(label = g.first().label.ifEmpty { START_LABEL })
+            expanded += g.drop(1)
         }
         return Song(id, title, expanded.ifEmpty { slides }, unknownOrder = unknown)
     }

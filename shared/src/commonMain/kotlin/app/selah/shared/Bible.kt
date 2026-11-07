@@ -3,6 +3,7 @@ package app.selah.shared
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -44,6 +45,8 @@ data class BibleReference(
         // libro (puede empezar con 1-3), capítulo, versículo opcional y "hasta" opcional (versículo o capítulo:versículo)
         private val RX = Regex("""^\s*([1-3]?\s*[^\d\s;][^\d;]*?)\.?\s*(\d+)(?:\s*[:.,\s]\s*(\d+))?(?:\s*[-–]\s*(?:(\d+)\s*[:.]\s*)?(\d+))?\s*$""")
         // Continuación sin libro tras ";": "5:24", "18", "18-20", "6:1-7:2"
+        private const val MAX_REFERENCE_LENGTH = 80
+        private val HUGE_NUMBER = Regex("""\d{7,}""")
         private val CONT = Regex("""^\s*(\d+)(?:\s*[:.]\s*(\d+))?(?:\s*[-–]\s*(?:(\d+)\s*[:.]\s*)?(\d+))?\s*$""")
 
         /** Una sola cita (sin ";"). */
@@ -56,6 +59,9 @@ data class BibleReference(
         fun parseAll(query: String): List<BibleReference>? {
             val parts = query.split(';').map { it.trim() }.filter { it.isNotEmpty() }
             if (parts.isEmpty()) return null
+            // Una cita es corta: un texto largo no es cita (y así las expresiones regulares no tardan).
+            // Un número de más de 6 cifras no existe en la Biblia (y no cabría en un Int): no es cita.
+            if (parts.any { it.length > MAX_REFERENCE_LENGTH || HUGE_NUMBER.containsMatchIn(it) }) return null
             val out = mutableListOf<BibleReference>()
             for (part in parts) {
                 val full = RX.matchEntire(part)
@@ -254,11 +260,19 @@ class Bible(val name: String, val books: List<Book>) {
             "JAS" to 58, "1JN" to 61, "2JN" to 62, "3JN" to 63, "JDE" to 64,
         )
 
+        /** Lo más grande que existe: Salmos tiene 150 capítulos y el Salmo 119, 176 versículos (con margen). */
+        private const val MAX_CHAPTER = 200
+        private const val MAX_VERSE = 250
+
         /** Mínimo de libros para aceptar un archivo como Biblia (el Nuevo Testamento solo tiene 27). */
         private const val MIN_BOOKS = 27
 
         /** Arma la Biblia con los libros que vinieron (posición canónica → capítulo → versículo → texto). */
-        private fun build(name: String, verses: Map<Int, Map<Int, Map<Int, String>>>): Bible {
+        private fun build(name: String, all: Map<Int, Map<Int, Map<Int, String>>>): Bible {
+            // Un número de capítulo o versículo absurdo ("GEN 1:5000000") armaría listas gigantes: se salta.
+            val verses = all.mapValues { (_, chapters) ->
+                chapters.filterKeys { it in 1..MAX_CHAPTER }.mapValues { (_, vs) -> vs.filterKeys { it in 1..MAX_VERSE } }.filterValues { it.isNotEmpty() }
+            }.filterValues { it.isNotEmpty() }
             if (verses.size < MIN_BOOKS) {
                 throw IllegalArgumentException("El archivo no parece una Biblia: tiene ${verses.size} libros reconocibles")
             }
@@ -287,9 +301,9 @@ class Bible(val name: String, val books: List<Book>) {
             for (raw in text.removePrefix("﻿").lineSequence()) {
                 val m = VPL_LINE.matchEntire(raw.trim()) ?: continue
                 val (code, ch, v, body) = m.destructured
+                val chapter = ch.toIntOrNull()?.takeIf { it in 1..MAX_CHAPTER } ?: continue
+                val verse = v.toIntOrNull()?.takeIf { it in 1..MAX_VERSE } ?: continue
                 if (code !in verses) { order += code; verses[code] = mutableMapOf() }
-                val chapter = ch.toInt()
-                val verse = v.toInt()
                 verses.getValue(code).getOrPut(chapter) { mutableMapOf() }[verse] =
                     if (verse == 1) fixDropCap(body) else body
             }
@@ -302,7 +316,9 @@ class Bible(val name: String, val books: List<Book>) {
             return build(name, byBook)
         }
 
-        private val ZEFANIA_TAG = Regex("""<(BIBLEBOOK|CHAPTER|VERS)\b([^>]*?)(/?)>""", RegexOption.IGNORE_CASE)
+        // [^<>]: una etiqueta sin ">" no se come el resto del archivo (eso era lento con archivos cortados).
+        private val ZEFANIA_TAG = Regex("""<(BIBLEBOOK|CHAPTER|VERS)\b([^<>]*?)(/?)>""", RegexOption.IGNORE_CASE)
+        private val VERS_END = Regex("""</VERS>""", RegexOption.IGNORE_CASE)
         private val NOTE = Regex("""<NOTE\b[^>]*>.*?</NOTE>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
         private val TAG = Regex("""<[^>]*>""")
         private val SPACES = Regex("""\s+""")
@@ -319,6 +335,8 @@ class Bible(val name: String, val books: List<Book>) {
             val verses = mutableMapOf<Int, MutableMap<Int, MutableMap<Int, String>>>()
             var book = -1
             var chapter = 0
+            // Dónde cierra cada versículo, buscado una sola vez (antes, un archivo cortado tardaba minutos).
+            val ends = VERS_END.findAll(text).map { it.range.first }.toList()
             for (m in ZEFANIA_TAG.findAll(text)) {
                 val attrs = m.groupValues[2]
                 when (m.groupValues[1].uppercase()) {
@@ -327,7 +345,8 @@ class Bible(val name: String, val books: List<Book>) {
                     "VERS" -> {
                         if (book !in BOOK_NAMES.indices || chapter < 1 || m.groupValues[3] == "/") continue
                         val verse = attr(attrs, "vnumber") ?: continue
-                        val end = text.indexOf("</VERS>", m.range.last + 1, ignoreCase = true).takeIf { it >= 0 } ?: continue
+                        val start = m.range.last + 1
+                        val end = ends.getOrNull(ends.binarySearch(start).let { if (it >= 0) it else -it - 1 }) ?: continue
                         val body = cleanXml(text.substring(m.range.last + 1, end))
                         if (body.isNotEmpty()) verses.getOrPut(book) { mutableMapOf() }.getOrPut(chapter) { mutableMapOf() }[verse] = body
                     }
@@ -380,7 +399,7 @@ class Bible(val name: String, val books: List<Book>) {
                 val o = el.jsonObject
                 val bookName = o["name"]?.jsonPrimitive?.contentOrNull ?: BOOK_NAMES.getOrElse(i) { "Libro ${i + 1}" }
                 val chapters = (o["chapters"] ?: throw IllegalArgumentException("Falta \"chapters\" en $bookName"))
-                    .jsonArray.map { ch -> ch.jsonArray.map { it.jsonPrimitive.content } }
+                    .jsonArray.map { ch -> ch.jsonArray.map { (it as? JsonPrimitive)?.contentOrNull.orEmpty() } } // null = versículo vacío
                 Book(bookName, chapters)
             }
             return Bible(name, books)

@@ -1,5 +1,6 @@
 package app.selah.desktop
 
+import app.selah.shared.cleanListName
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
