@@ -45,11 +45,17 @@ Sin publicidad, sin cuentas y sin recopilar datos. Todo queda en tu computador.
 Código abierto (licencia MIT): https://github.com/oscarortega14/selah
 
 ## What's new in this version (Novedades)
-Primera versión en la Microsoft Store.
+Versión 2.6.0:
+• Más Biblias: descarga gratis otras traducciones (Biblia en Español Sencillo, Nueva Biblia Viva, Palabra de Dios para ti, Reina Valera Gómez y más, también en inglés y portugués) o agrega la tuya desde un archivo.
+• Presentaciones de PowerPoint y PDF: se pasan con Siguiente, igual que una canción.
+• Importa tus canciones de EasyWorship 6 y 7.
+• Reporte para CCLI con las canciones proyectadas.
+• Salida de video por la red (NDI) para OBS, vMix y otros.
+• Más seguridad y estabilidad.
 
 ## Product features (características: una por línea, máx. 200 caracteres cada una)
 1. Letras de canciones grandes y claras en el videobeam, con salto al coro o a cualquier estrofa.
-2. Biblia Reina-Valera 1909 y Versión Biblia Libre incluidas: cita, explorador por libro y capítulo, búsqueda por frase.
+2. Biblia Reina-Valera 1909 y Versión Biblia Libre incluidas, y más traducciones gratis para descargar: cita, explorador y búsqueda por frase.
 3. Dos traducciones de la Biblia en pantalla a la vez.
 4. Lista del culto con canciones, lecturas, anuncios y predicaciones.
 5. Control desde el celular o la tablet en el mismo Wi-Fi, protegido con clave.
@@ -108,7 +114,7 @@ drogas, apuestas ni compras. No comparte ubicación. **Sí permite intercambiar 
 
 **Pricing and availability**: Gratis (Free) · Todos los mercados · Visibilidad pública.
 
-**Packages**: subir `Selah-<versión>.msix` (la última: 2.5.0). Familia de dispositivos: Windows 10/11 Desktop.
+**Packages**: subir `Selah-<versión>.msix` (la última: 2.6.0). Familia de dispositivos: Windows 10/11 Desktop.
 
 **Submission options → Notes for certification** (en inglés):
 > Selah is a free, open-source (MIT) church projection program: it shows song lyrics and Bible verses on a
