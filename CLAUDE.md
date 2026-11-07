@@ -84,3 +84,11 @@ Falta:
   el MSIX se sube en Partner Center → Selah Remote → "Start update".
 - Sin probar de punta a punta: NDI con un receptor real (instalar NDI Tools) y EasyWorship con una base real.
 
+## Después de la 2.5.0 (en main, sin publicar; sería la 2.5.1)
+Por comentarios de los probadores (2026-11-07):
+- Celular: pantalla de bienvenida y **modo demostración** sin computador (`DemoServer.kt` atiende las mismas
+  órdenes que el PC; `DemoContent.kt`: 6 canciones de letra original y 6 capítulos de la RV1909).
+- PC: **"＋ Más Biblias…"** (`BibleDownloads.kt`, `BiblesDialog.kt`): 12 traducciones libres de eBible.org
+  (VPL) y agregar desde archivo (.txt VPL, .xml Zefania, .json, .zip). Solo traducciones repartibles gratis.
+Para publicar: subir versión a 2.5.1 (PC, Android 20501, iPhone 20501), con permiso del dueño.
+
