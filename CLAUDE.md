@@ -87,13 +87,23 @@ Falta:
   el MSIX se sube en Partner Center → Selah Remote → "Start update".
 - Sin probar de punta a punta: NDI con un receptor real (instalar NDI Tools) y EasyWorship con una base real.
 
-## Versión 2.5.1 (2026-11-07): demostración del celular y "Más Biblias"
-Por comentarios de los probadores:
+## Versión 2.6.0 (2026-11-07): demostración del celular, "Más Biblias" y arreglos adversariales
+(Primero se armó como 2.5.1 —builds iPhone 20501/20502 subidos y sin usar— y se cambió a 2.6.0 porque trae
+funciones nuevas.) Por comentarios de los probadores:
 - Celular: pantalla de bienvenida y **modo demostración** sin computador (`DemoServer.kt` atiende las mismas
   órdenes que el PC; `DemoContent.kt`: 6 canciones de letra original y 6 capítulos de la RV1909).
 - PC: **"＋ Más Biblias…"** (`BibleDownloads.kt`, `BiblesDialog.kt`): 12 traducciones libres de eBible.org
   (VPL) y agregar desde archivo (.txt VPL, .xml Zefania, .json, .zip). Solo traducciones repartibles gratis.
-Hecho: iPhone build 2.5.1 (20502, con los arreglos adversariales; el 20501 no usar) subido a App Store Connect; AAB 2.5.1 (20501) en el escritorio
-(`~/Desktop/Selah Remoto - Google Play/`), con textos de "Qué hay de nuevo" para cada tienda.
+- 36 bugs de las pruebas adversariales (`Adversarial*Test`), entre ellos la clave del celular que podía
+  llegarle a otro PC.
+Hecho: iPhone build 2.6.0 (20600) subido a App Store Connect; AAB 2.6.0 (20600) en
+`~/Desktop/Selah Remoto - Google Play/`, con textos de "Qué hay de nuevo" para cada tienda.
 Falta: enviar a revisión (App Store y Play, el dueño); en Windows: `packageMsi` + firma + GitHub Release
 y `packageMsix` → Partner Center "Start update" (con permiso del dueño).
+
+## Cómo numerar versiones
+- 2.6.**x**: solo arreglos o cambios pequeños.
+- 2.**x**.0: funciones nuevas que se notan (todo lo anterior sigue funcionando).
+- **x**.0.0: algo deja de ser compatible (protocolo con apps viejas, formato de canciones, carpeta).
+Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
+distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
