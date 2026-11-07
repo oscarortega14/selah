@@ -758,9 +758,10 @@ private fun BibleChooser(catalog: Catalog, onSelect: (String) -> Unit, onSelectS
                     listOf<String?>(null) + catalog.bibleNames.filter { it != catalog.bibleName }, catalog.secondBibleName,
                 ) { onSelectSecond(it) }
             }
-            TextButton(onOpenBibles, Modifier.hand(), contentPadding = PaddingValues(horizontal = 6.dp)) {
-                Text("＋ Más Biblias…", style = MaterialTheme.typography.bodySmall)
-            }
+        }
+        // En su propia línea: junto a las dos traducciones no cabía (en Windows salía letra por letra).
+        TextButton(onOpenBibles, Modifier.hand(), contentPadding = PaddingValues(horizontal = 6.dp)) {
+            Text("＋ Más Biblias…", style = MaterialTheme.typography.bodySmall, maxLines = 1, softWrap = false)
         }
         (catalog.bibleError ?: listOfNotNull(Library.BIBLE_NOTICES[catalog.bibleName], Library.BIBLE_NOTICES[catalog.secondBibleName]).distinct().joinToString(" · ").ifEmpty { null })?.let {
             Text(
