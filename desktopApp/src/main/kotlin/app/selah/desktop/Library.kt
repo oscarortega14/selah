@@ -38,7 +38,7 @@ data class Catalog(
 /**
  * Biblioteca en disco:
  *   <base>/canciones/  un archivo .txt por canción
- *   <base>/biblia/     Biblias propias (.json o .txt VPL), además de las que vienen con el programa
+ *   <base>/biblia/     Biblias propias (.txt VPL, .xml Zefania o .json), además de las que vienen con el programa
  */
 class Library(val baseDir: File) {
     val songsDir = File(baseDir, "canciones")
@@ -67,6 +67,9 @@ class Library(val baseDir: File) {
 
     /** Biblias de la carpeta biblia/, ya leídas. */
     @Volatile private var userBibles: Map<String, Bible> = emptyMap()
+
+    /** Nombres de las Biblias agregadas (descargadas o desde un archivo); las que vienen con el programa no cuentan. */
+    val userBibleNames: Set<String> get() = userBibles.keys
     @Volatile private var bibleErrors: String? = null
 
     private val _catalog = MutableStateFlow(Catalog())
@@ -238,15 +241,11 @@ class Library(val baseDir: File) {
         songs = loaded.associateBy { it.id }
 
         val errors = mutableListOf<String>()
-        // .json (formato propio) o .txt (formato VPL de eBible.org)
-        userBibles = bibleDir.listFiles { f -> f.isFile && f.extension.lowercase() in setOf("json", "txt") }
+        // .txt (formato VPL de eBible.org), .xml (Zefania) o .json (formato propio)
+        userBibles = bibleDir.listFiles { f -> f.isFile && f.extension.lowercase() in BIBLE_EXTENSIONS }
             .orEmpty().sortedBy { it.name.lowercase() }
             .mapNotNull { f ->
-                runCatching {
-                    val text = readTextSmart(f)
-                    if (f.extension.equals("json", true)) Bible.fromJson(text, f.nameWithoutExtension)
-                    else Bible.fromVpl(text, f.nameWithoutExtension)
-                }
+                runCatching { parseBible(readTextSmart(f), f.extension, f.nameWithoutExtension) }
                     .onFailure { errors += "No pude leer ${f.name}: ${it.message}"; Log.error("No pude leer la Biblia ${f.name}", it) }
                     .getOrNull()
             }
@@ -276,7 +275,7 @@ class Library(val baseDir: File) {
         secondBible = preferredSecondBible?.takeIf { it in names && it != active }?.let { userBibles[it] ?: bundled(it) }
         // El índice de búsqueda se arma en segundo plano: la primera búsqueda ya no espera (~350 ms → ~50 ms).
         listOfNotNull(bible, secondBible).forEach { b -> Thread({ runCatching { b.warmUp() } }, "indice-biblia").apply { isDaemon = true; start() } }
-        val error = bibleErrors ?: if (bible == null) "No hay Biblia. Copia un archivo .json o .txt (VPL) en ${bibleDir.absolutePath}" else null
+        val error = bibleErrors ?: if (bible == null) "No hay Biblia. Usa \"＋ Más Biblias…\" para descargar una o agregarla desde un archivo" else null
         _catalog.value = Catalog(
             songs, bible?.name, error, names, BIBLE_NOTICES[bible?.name], scanAnnouncements(),
             sermons.values.sortedBy { normalizeText(it.title) }.map { it.summary() },
@@ -381,10 +380,20 @@ class Library(val baseDir: File) {
         /** Biblias que vienen con el programa (archivos VPL en resources/biblia). */
         val BUNDLED_BIBLES = listOf("Reina-Valera 1909", "Versión Biblia Libre")
 
+        /** Formatos de Biblia que se leen de la carpeta biblia/. */
+        val BIBLE_EXTENSIONS = setOf("txt", "xml", "json")
+
+        /** Lee una Biblia según su formato (por la extensión del archivo). */
+        fun parseBible(text: String, extension: String, name: String): Bible = when (extension.lowercase()) {
+            "json" -> Bible.fromJson(text, name)
+            "xml" -> Bible.fromZefania(text, name)
+            else -> Bible.fromVpl(text, name)
+        }
+
         /** Créditos que pide la licencia (CC BY-SA 4.0) de cada traducción incluida. */
         val BIBLE_NOTICES = mapOf(
             "Versión Biblia Libre" to "© 2018-2020 Jonathan Gallagher y Shelly Barrios de Avila · CC BY-SA 4.0 · eBible.org",
-        )
+        ) + BibleDownloads.CATALOG.associate { it.title to it.credit }
 
         private val bundledCache = java.util.concurrent.ConcurrentHashMap<String, Bible>()
 

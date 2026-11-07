@@ -359,4 +359,41 @@ class ProtocolTest {
         assertEquals(listOf("1"), songs.search("senor").map { it.id })
         assertEquals(2, songs.search("  ").size)
     }
+
+    @Test
+    fun vplSkipsDeuterocanonicalBooksAndAcceptsUsfmCodes() {
+        // Como spabll de eBible.org: los deuterocanónicos (TOB, SIR…) van entre Malaquías y Mateo.
+        val ot = listOf("GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR",
+            "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SOL", "ISA", "JER", "LAM", "EZE", "DAN", "HOS", "JOE", "AMO", "OBA",
+            "JON", "MIC", "NAH", "HAB", "ZEP", "HAG", "ZEC", "MAL")
+        val nt = listOf("MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH", "2TH",
+            "1TI", "2TI", "TIT", "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD", "REV")
+        val text = (ot + listOf("TOB", "SIR", "1MA") + nt).joinToString("\n") { "$it 1:1 Texto de $it." }
+        val b = Bible.fromVpl(text, "Libre")
+        assertEquals(66, b.books.size)
+        assertEquals("Texto de JHN.", b.lookup("Juan 1:1").slides.single().text)
+        assertEquals("Texto de MAL.", b.lookup("Malaquías 1:1").slides.single().text)
+
+        // Solo el Nuevo Testamento: sirve, y Mateo queda en el Nuevo Testamento.
+        val onlyNt = Bible.fromVpl(nt.joinToString("\n") { "$it 1:1 x" }, "NT")
+        assertEquals(27, onlyNt.books.size)
+        assertEquals("Mateo", onlyNt.books.first().name)
+        assertEquals(emptySet(), oldTestamentIndices(onlyNt.books.map { it.name }))
+        assertEquals(setOf(0), oldTestamentIndices(listOf("Salmos", "Juan", "Romanos")))
+    }
+
+    @Test
+    fun loadsZefaniaXml() {
+        val books = (1..66).joinToString("") { n ->
+            """<BIBLEBOOK bnumber="$n" bname="L$n"><CHAPTER cnumber="1"><VERS vnumber="1">Uno &amp; dos</VERS>
+               <VERS vnumber="2">Con <STYLE css="x">estilo</STYLE><NOTE>nota que no va</NOTE> y &#233;nfasis</VERS></CHAPTER></BIBLEBOOK>"""
+        }
+        val extra = """<BIBLEBOOK bnumber="67"><CHAPTER cnumber="1"><VERS vnumber="1">Tobías</VERS></CHAPTER></BIBLEBOOK>"""
+        val b = Bible.fromZefania("""<?xml version="1.0"?><XMLBIBLE biblename="Prueba">$books$extra</XMLBIBLE>""", "Z")
+        assertEquals(66, b.books.size)
+        assertEquals("Juan", b.books[42].name)
+        assertEquals("Uno & dos", b.lookup("Juan 1:1").slides.single().text)
+        assertEquals("Con estilo y énfasis", b.lookup("Apocalipsis 1:2").slides.single().text)
+        assertFailsWith<IllegalArgumentException> { Bible.fromZefania("<XMLBIBLE></XMLBIBLE>", "vacía") }
+    }
 }

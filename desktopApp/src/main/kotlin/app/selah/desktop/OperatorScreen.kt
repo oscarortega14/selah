@@ -102,6 +102,8 @@ fun OperatorScreen(
     bible: Bible? = null,
     onSelectBible: (String) -> Unit = {},
     onSelectSecondBible: (String?) -> Unit = {},
+    /** Abrir la ventana para descargar o agregar Biblias. */
+    onOpenBibles: () -> Unit = {},
     firewallOk: Boolean?,
     onImport: () -> String?,
     onExport: () -> String?,
@@ -146,6 +148,7 @@ fun OperatorScreen(
                 LeftPanel(
                     catalog, lastSung, plan, savedLists, onDeleteSavedList, Modifier.width(350.dp).fillMaxHeight(), send, onReload, onOpenFolder, onEdit, searchBible, bible, onSelectBible, onSelectSecondBible,
                     onImport = { onImport()?.let { message = it } }, onExport = { onExport()?.let { message = it } },
+                    onOpenBibles = onOpenBibles,
                     currentMedia = state.media,
                     onAddAnnouncements = { onAddAnnouncements()?.let { message = it } },
                     onOpenAnnouncements = onOpenAnnouncements,
@@ -241,6 +244,7 @@ private fun LeftPanel(
     onSelectSecondBible: (String?) -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
+    onOpenBibles: () -> Unit,
     currentMedia: String?,
     onAddAnnouncements: () -> Unit,
     onOpenAnnouncements: () -> Unit,
@@ -272,7 +276,7 @@ private fun LeftPanel(
         }
         when (tab) {
             0 -> SongsTab(catalog, lastSung, Modifier.weight(1f), send, present, onReload, onOpenFolder, onEdit, onImport, onExport, onEditSermon, searchSongs)
-            1 -> BibleTab(catalog, bible, onSelectBible, onSelectSecondBible, Modifier.weight(1f), send, present, searchBible)
+            1 -> BibleTab(catalog, bible, onSelectBible, onSelectSecondBible, onOpenBibles, Modifier.weight(1f), send, present, searchBible)
             2 -> AnnouncementsTab(
                 catalog.announcements, currentMedia, Modifier.weight(1f), send, present, onAddAnnouncements, onOpenAnnouncements,
                 catalog.presentations, currentPresentation, onAddPresentations, onOpenPresentations, presentationsReady,
@@ -362,6 +366,7 @@ private fun BibleTab(
     bible: Bible?,
     onSelectBible: (String) -> Unit,
     onSelectSecondBible: (String?) -> Unit,
+    onOpenBibles: () -> Unit,
     modifier: Modifier,
     send: (ClientMessage) -> Unit,
     present: (ClientMessage) -> Unit,
@@ -374,7 +379,7 @@ private fun BibleTab(
         else hits = searchBible(reference)
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        BibleChooser(catalog, onSelectBible, onSelectSecondBible)
+        BibleChooser(catalog, onSelectBible, onSelectSecondBible, onOpenBibles)
         OutlinedTextField(
             reference, { reference = it },
             label = { Text("Cita o frase (ej. Juan 3:16 · amó Dios)") },
@@ -742,7 +747,7 @@ private fun ProjectorMenu(p: ProjectorControl) {
 
 /** Traducción en uso y la segunda (opcional), con menús para cambiarlas, y los créditos que pide la licencia. */
 @Composable
-private fun BibleChooser(catalog: Catalog, onSelect: (String) -> Unit, onSelectSecond: (String?) -> Unit) {
+private fun BibleChooser(catalog: Catalog, onSelect: (String) -> Unit, onSelectSecond: (String?) -> Unit, onOpenBibles: () -> Unit) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ChoiceMenu("Traducción", catalog.bibleName ?: "ninguna", catalog.bibleNames, catalog.bibleName) { it?.let(onSelect) }
@@ -751,6 +756,9 @@ private fun BibleChooser(catalog: Catalog, onSelect: (String) -> Unit, onSelectS
                     "+ segunda", catalog.secondBibleName ?: "ninguna",
                     listOf<String?>(null) + catalog.bibleNames.filter { it != catalog.bibleName }, catalog.secondBibleName,
                 ) { onSelectSecond(it) }
+            }
+            TextButton(onOpenBibles, Modifier.hand(), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                Text("＋ Más Biblias…", style = MaterialTheme.typography.bodySmall)
             }
         }
         (catalog.bibleError ?: listOfNotNull(Library.BIBLE_NOTICES[catalog.bibleName], Library.BIBLE_NOTICES[catalog.secondBibleName]).distinct().joinToString(" · ").ifEmpty { null })?.let {

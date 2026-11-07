@@ -100,6 +100,7 @@ fun main() {
         var connectOpen by remember { mutableStateOf(false) }
         var historyOpen by remember { mutableStateOf(false) }
         var backupsOpen by remember { mutableStateOf(false) }
+        var biblesOpen by remember { mutableStateOf(false) }
         // Respaldo semanal automático, un rato después de abrir.
         LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(30_000)
@@ -187,6 +188,7 @@ fun main() {
                     onOpenUpdate = { updateOpen = true },
                     onOpenWelcome = { settingsStore.update { it.copy(welcomeDone = false) } },
                     onOpenBackups = { backupsOpen = true },
+                    onOpenBibles = { biblesOpen = true },
                     lastSung = lastSung,
                     searchBible = { q -> library.bible?.search(q) },
                     searchSongs = { q -> library.searchSongs(q) },
@@ -215,6 +217,14 @@ fun main() {
                         onLater = { updateOpen = false },
                         onSkip = { updateOpen = false; settingsStore.update { it.copy(skippedUpdate = release!!.version) } },
                         onExitForInstall = { server.stop(); discovery.stop(); exitApplication() },
+                    )
+                }
+                if (biblesOpen) {
+                    BiblesDialog(
+                        library, catalog,
+                        onUse = { name -> scope.launch(Dispatchers.IO) { commands.onSelectBible(name) } },
+                        onKeep = { name -> if (settingsStore.value.bible == null) settingsStore.update { it.copy(bible = name) } },
+                        onClose = { biblesOpen = false },
                     )
                 }
                 if (backupsOpen) {

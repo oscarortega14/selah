@@ -12,6 +12,17 @@ import kotlinx.serialization.json.jsonPrimitive
 const val OLD_TESTAMENT_BOOKS = 39
 
 /**
+ * Posiciones de [names] que son del Antiguo Testamento. Se decide por el nombre del libro
+ * (una Biblia puede traer solo el Nuevo Testamento, o la demostración solo algunos libros);
+ * si los nombres no son los de siempre (una Biblia en JSON con otros nombres), por la posición.
+ */
+fun oldTestamentIndices(names: List<String>): Set<Int> {
+    val canonical = names.map { Bible.BOOK_NAMES.indexOf(it) }
+    return if (canonical.all { it >= 0 }) names.indices.filter { canonical[it] < OLD_TESTAMENT_BOOKS }.toSet()
+    else names.indices.filter { it < OLD_TESTAMENT_BOOKS }.toSet()
+}
+
+/**
  * Posición del versículo [verse] (1…) entre las diapositivas del capítulo ya proyectado
  * (los versículos vacíos no se proyectan, así que no cuentan).
  */
@@ -229,9 +240,46 @@ class Bible(val name: String, val books: List<Book>) {
         private val KEEP_UPPERCASE = setOf("JEHOVÁ", "JEHOVA")
 
         /**
+         * Código de cada libro (posición canónica 0…65). Los de eBible.org (JOH, PHI, SOL…) y los de USFM
+         * (JHN, PHP, SNG…). Los deuterocanónicos (TOB, SIR, 1MA…) no están: se saltan.
+         */
+        private val BOOK_CODES: Map<String, Int> = listOf(
+            "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH", "2CH", "EZR",
+            "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SOL", "ISA", "JER", "LAM", "EZE", "DAN", "HOS", "JOE", "AMO", "OBA",
+            "JON", "MIC", "NAH", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+            "MAT", "MAR", "LUK", "JOH", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHI", "COL", "1TH", "2TH",
+            "1TI", "2TI", "TIT", "PHM", "HEB", "JAM", "1PE", "2PE", "1JO", "2JO", "3JO", "JUD", "REV",
+        ).withIndex().associate { (i, c) -> c to i } + mapOf(
+            "SNG" to 21, "EZK" to 25, "JOL" to 28, "NAM" to 33, "MRK" to 40, "JHN" to 42, "PHP" to 49,
+            "JAS" to 58, "1JN" to 61, "2JN" to 62, "3JN" to 63, "JDE" to 64,
+        )
+
+        /** Mínimo de libros para aceptar un archivo como Biblia (el Nuevo Testamento solo tiene 27). */
+        private const val MIN_BOOKS = 27
+
+        /** Arma la Biblia con los libros que vinieron (posición canónica → capítulo → versículo → texto). */
+        private fun build(name: String, verses: Map<Int, Map<Int, Map<Int, String>>>): Bible {
+            if (verses.size < MIN_BOOKS) {
+                throw IllegalArgumentException("El archivo no parece una Biblia: tiene ${verses.size} libros reconocibles")
+            }
+            val books = verses.keys.sorted().map { b ->
+                val chapters = verses.getValue(b)
+                Book(
+                    BOOK_NAMES[b],
+                    (1..chapters.keys.max()).map { c ->
+                        val vs = chapters[c].orEmpty()
+                        if (vs.isEmpty()) emptyList() else (1..vs.keys.max()).map { vs[it].orEmpty() }
+                    },
+                )
+            }
+            return Bible(name, books)
+        }
+
+        /**
          * Formato VPL de eBible.org (un versículo por línea), ej. spaRV1909_vpl.txt:
          *     GEN 1:1 EN el principio crió Dios los cielos y la tierra.
-         * Los libros se toman en el orden en que aparecen (deben ser los 66 en orden canónico).
+         * Los libros se reconocen por su código (de eBible.org o USFM); los deuterocanónicos se saltan.
+         * Si ningún código se reconoce pero hay 66 libros, se toman en el orden en que aparecen.
          */
         fun fromVpl(text: String, name: String): Bible {
             val order = mutableListOf<String>()
@@ -245,21 +293,67 @@ class Bible(val name: String, val books: List<Book>) {
                 verses.getValue(code).getOrPut(chapter) { mutableMapOf() }[verse] =
                     if (verse == 1) fixDropCap(body) else body
             }
-            if (order.size != BOOK_NAMES.size) {
-                throw IllegalArgumentException("Se esperaban 66 libros y el archivo tiene ${order.size}")
+            val known = order.filter { it.uppercase() in BOOK_CODES }
+            val byBook: Map<Int, Map<Int, Map<Int, String>>> = when {
+                known.isNotEmpty() -> known.associate { BOOK_CODES.getValue(it.uppercase()) to verses.getValue(it) }
+                order.size == BOOK_NAMES.size -> order.withIndex().associate { (i, code) -> i to verses.getValue(code) }
+                else -> throw IllegalArgumentException("Se esperaban 66 libros y el archivo tiene ${order.size}")
             }
-            val books = order.mapIndexed { i, code ->
-                val chapters = verses.getValue(code)
-                Book(
-                    BOOK_NAMES[i],
-                    (1..chapters.keys.max()).map { c ->
-                        val vs = chapters[c].orEmpty()
-                        if (vs.isEmpty()) emptyList() else (1..vs.keys.max()).map { vs[it].orEmpty() }
-                    },
-                )
-            }
-            return Bible(name, books)
+            return build(name, byBook)
         }
+
+        private val ZEFANIA_TAG = Regex("""<(BIBLEBOOK|CHAPTER|VERS)\b([^>]*?)(/?)>""", RegexOption.IGNORE_CASE)
+        private val NOTE = Regex("""<NOTE\b[^>]*>.*?</NOTE>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        private val TAG = Regex("""<[^>]*>""")
+        private val SPACES = Regex("""\s+""")
+
+        private fun attr(attrs: String, key: String): Int? =
+            Regex("""\b$key\s*=\s*["']?(\d+)""", RegexOption.IGNORE_CASE).find(attrs)?.groupValues?.get(1)?.toIntOrNull()
+
+        /**
+         * Zefania XML, el formato de Biblias gratuitas más común en internet:
+         *     <XMLBIBLE><BIBLEBOOK bnumber="43"><CHAPTER cnumber="3"><VERS vnumber="16">Porque de tal…</VERS>
+         * bnumber 1…66 en orden canónico; los demás (deuterocanónicos) se saltan.
+         */
+        fun fromZefania(text: String, name: String): Bible {
+            val verses = mutableMapOf<Int, MutableMap<Int, MutableMap<Int, String>>>()
+            var book = -1
+            var chapter = 0
+            for (m in ZEFANIA_TAG.findAll(text)) {
+                val attrs = m.groupValues[2]
+                when (m.groupValues[1].uppercase()) {
+                    "BIBLEBOOK" -> book = (attr(attrs, "bnumber") ?: 0) - 1
+                    "CHAPTER" -> chapter = attr(attrs, "cnumber") ?: 0
+                    "VERS" -> {
+                        if (book !in BOOK_NAMES.indices || chapter < 1 || m.groupValues[3] == "/") continue
+                        val verse = attr(attrs, "vnumber") ?: continue
+                        val end = text.indexOf("</VERS>", m.range.last + 1, ignoreCase = true).takeIf { it >= 0 } ?: continue
+                        val body = cleanXml(text.substring(m.range.last + 1, end))
+                        if (body.isNotEmpty()) verses.getOrPut(book) { mutableMapOf() }.getOrPut(chapter) { mutableMapOf() }[verse] = body
+                    }
+                }
+            }
+            return build(name, verses)
+        }
+
+        /** Texto de un versículo en XML: sin notas ni etiquetas, con los &amp; ya convertidos. */
+        private fun cleanXml(s: String): String = decodeEntities(s.replace(NOTE, " ").replace(TAG, " ")).replace(SPACES, " ").trim()
+
+        private fun decodeEntities(s: String): String {
+            if ('&' !in s) return s
+            return Regex("""&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos|nbsp);""").replace(s) { m ->
+                val e = m.groupValues[1]
+                when {
+                    e.startsWith("#x") -> e.drop(2).toIntOrNull(16)?.let { codePointToString(it) } ?: m.value
+                    e.startsWith("#") -> e.drop(1).toIntOrNull()?.let { codePointToString(it) } ?: m.value
+                    else -> mapOf("amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to " ")[e]!!
+                }
+            }
+        }
+
+        private fun codePointToString(cp: Int): String =
+            if (cp < 0x10000) cp.toChar().toString()
+            else (cp - 0x10000).let { charArrayOf((0xD800 + (it shr 10)).toChar(), (0xDC00 + (it and 0x3FF)).toChar()).concatToString() }
 
         /** "EN el principio" -> "En el principio" (letra capital de la edición impresa). */
         internal fun fixDropCap(s: String): String {

@@ -45,7 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.selah.shared.BibleBookInfo
-import app.selah.shared.OLD_TESTAMENT_BOOKS
+import app.selah.shared.oldTestamentIndices
 import app.selah.shared.ServerMessage
 import app.selah.shared.slideIndexOfVerse
 
@@ -186,9 +186,10 @@ private fun Browser(
                 GridCells.Adaptive(104.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                val oldTestament = oldTestamentIndices(books.map { it.name })
                 val groups = listOf(
-                    "Antiguo Testamento" to books.indices.filter { it < OLD_TESTAMENT_BOOKS },
-                    "Nuevo Testamento" to books.indices.filter { it >= OLD_TESTAMENT_BOOKS },
+                    "Antiguo Testamento" to books.indices.filter { it in oldTestament },
+                    "Nuevo Testamento" to books.indices.filter { it !in oldTestament },
                 )
                 for ((title, indices) in groups) {
                     if (indices.isEmpty()) continue

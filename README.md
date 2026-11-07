@@ -49,13 +49,18 @@ Línea del coro
 
 ### Biblia: `Selah/biblia/`
 
-Se usa el primer archivo `.txt` o `.json` de la carpeta (orden alfabético).
+Vienen la **Reina-Valera 1909** (dominio público) y la **Versión Biblia Libre** (CC BY-SA 4.0).
+Para más: pestaña Biblia → **＋ Más Biblias…**
+- **Descargar gratis** (de eBible.org): Biblia en Español Sencillo, Biblia Libre Latinoamericana,
+  Biblia Libre para el Mundo, Nueva Biblia Viva, Palabra de Dios para ti, Reina Valera Gómez,
+  Valera 1602 Purificada, y algunas en inglés y portugués. Solo traducciones que se pueden repartir gratis.
+- **Agregar desde un archivo:** `.txt` (VPL de eBible.org, cualquiera de sus Biblias), `.xml` (Zefania),
+  `.json` o un `.zip` que traiga alguno de esos.
 
-**Recomendado:** la Reina-Valera 1909 (dominio público) de eBible.org en formato VPL
-(`https://ebible.org/Scriptures/spaRV1909_vpl.zip`): copia `spaRV1909_vpl.txt` a la carpeta,
-por ejemplo como `Reina-Valera 1909.txt`. Cualquier Biblia VPL de eBible.org con los 66 libros sirve.
+Quedan en la carpeta `biblia/` y se usan sin internet; los celulares las ven solas. Agregar una no cambia
+la que está en pantalla: se elige con "Usar" o en "Traducción". Los libros deuterocanónicos se saltan.
 
-También acepta JSON:
+Formato JSON:
 
 ```json
 {"name": "Reina-Valera 1909", "books": [{"name": "Génesis", "chapters": [["En el principio…", "…"]]}]}
@@ -63,7 +68,8 @@ También acepta JSON:
 
 o una lista de 66 libros en orden canónico: `[{"abbrev": "gn", "chapters": [[…]]}, …]`.
 
-Ojo con los derechos de autor: la RVR1960, NVI, NTV, etc. tienen licencia. La **Reina-Valera 1909** es de dominio público.
+Ojo con los derechos de autor: la RVR1960, NVI, NTV, LBLA, etc. tienen licencia de sus editoriales y Selah
+no puede traerlas ni descargarlas; una iglesia con permiso y un archivo puede agregarla desde el archivo.
 
 Citas aceptadas: `Juan 3:16`, `jn 3 16`, `Sal 23`, `1 Co 13:4-7`, `Génesis 1`.
 

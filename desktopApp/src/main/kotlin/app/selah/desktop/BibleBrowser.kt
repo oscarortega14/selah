@@ -35,7 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.selah.shared.Bible
 import app.selah.shared.ClientMessage
-import app.selah.shared.OLD_TESTAMENT_BOOKS
+import app.selah.shared.oldTestamentIndices
 import app.selah.shared.slideIndexOfVerse
 
 /**
@@ -142,9 +142,10 @@ private fun BookGrid(bible: Bible, onPick: (Int) -> Unit) {
         GridCells.Adaptive(96.dp), state = gridState,
         horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        val oldTestament = oldTestamentIndices(bible.books.map { it.name })
         val groups = listOf(
-            "Antiguo Testamento" to bible.books.indices.filter { it < OLD_TESTAMENT_BOOKS },
-            "Nuevo Testamento" to bible.books.indices.filter { it >= OLD_TESTAMENT_BOOKS },
+            "Antiguo Testamento" to bible.books.indices.filter { it in oldTestament },
+            "Nuevo Testamento" to bible.books.indices.filter { it !in oldTestament },
         )
         for ((title, indices) in groups) {
             if (indices.isEmpty()) continue
