@@ -750,7 +750,8 @@ private fun ProjectorMenu(p: ProjectorControl) {
 @Composable
 private fun BibleChooser(catalog: Catalog, onSelect: (String) -> Unit, onSelectSecond: (String?) -> Unit, onOpenBibles: () -> Unit) {
     Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Si los nombres son largos, la segunda traducción baja a otra línea en vez de cortarse.
+        androidx.compose.foundation.layout.FlowRow(itemVerticalAlignment = Alignment.CenterVertically) {
             ChoiceMenu("Traducción", catalog.bibleName ?: "ninguna", catalog.bibleNames, catalog.bibleName) { it?.let(onSelect) }
             if (catalog.bibleNames.size > 1) {
                 ChoiceMenu(
