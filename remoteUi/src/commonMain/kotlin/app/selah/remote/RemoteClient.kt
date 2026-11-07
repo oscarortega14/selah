@@ -46,6 +46,8 @@ sealed interface ConnectionStatus {
     data class Connecting(val host: String) : ConnectionStatus
     data class Connected(val host: String) : ConnectionStatus
     data class Failed(val host: String, val reason: String) : ConnectionStatus
+    /** Demostración: sin computador, con canciones y Biblia de ejemplo dentro de la app. */
+    data object Demo : ConnectionStatus
 }
 
 /** Conexión WebSocket con el escritorio. Se reconecta sola si se cae el Wi-Fi. */
@@ -140,7 +142,43 @@ class RemoteClient(private val scope: CoroutineScope) {
     /** Se llama cuando el PC cambió de dirección y se encontró de nuevo en la red (para guardarla). */
     var onHostChanged: ((String) -> Unit)? = null
 
+    /** El computador de mentira mientras se usa la demostración. */
+    private var demo: DemoServer? = null
+
+    /** Probar la app sin computador: todo funciona con canciones y Biblia de ejemplo. */
+    fun startDemo() {
+        job?.cancel()
+        job = null
+        currentHost = null
+        clearAll()
+        val server = DemoServer()
+        demo = server
+        _status.value = ConnectionStatus.Demo
+        server.welcome().forEach(::onMessage)
+    }
+
+    /** Salir de la demostración (para buscar un computador de verdad). */
+    fun stopDemo() {
+        if (demo == null) return
+        demo = null
+        clearAll()
+        _status.value = ConnectionStatus.Idle
+    }
+
+    /** Olvidar todo lo que llegó (al pasar de la demostración a un computador, o al revés). */
+    private fun clearAll() {
+        _state.value = PresentationState()
+        _songs.value = emptyList(); _bibleName.value = null; _bibleBooks.value = emptyList()
+        _bibleChapter.value = null; _bibleResults.value = null; _songResults.value = null
+        _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
+        _bibleNames.value = emptyList(); _secondBible.value = null
+        _plan.value = ServicePlanState(); _savedLists.value = emptyList()
+        _auth.value = null
+        serverOffset = 0
+    }
+
     fun connect(initialHost: String) {
+        if (demo != null) stopDemo()
         job?.cancel()
         job = scope.launch {
             var host = initialHost
@@ -206,6 +244,7 @@ class RemoteClient(private val scope: CoroutineScope) {
      * Devuelve un mensaje para mostrar. Se envía por partes, sin cargar todo el video en memoria.
      */
     suspend fun uploadAnnouncement(file: PickedFile): String {
+        if (demo != null) return "En la demostración no se suben archivos: conéctate al computador con Selah"
         val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return "No hay conexión con el computador"
         return runCatching {
             val response = http.post("http://$host:$DEFAULT_PORT/anuncios") {
@@ -227,6 +266,7 @@ class RemoteClient(private val scope: CoroutineScope) {
     fun clearBibleResults() { _bibleResults.value = null }
 
     fun send(msg: ClientMessage) {
+        demo?.let { server -> server.handle(msg).forEach(::onMessage); return }
         if (_status.value is ConnectionStatus.Connected) queue.trySend(msg)
     }
 

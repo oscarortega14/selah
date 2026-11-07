@@ -222,6 +222,9 @@ private fun Browser(
             }
             if (loaded == null) {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else if (loaded.verses.isEmpty()) {
+                // El PC siempre manda el capítulo completo; vacío solo pasa en la demostración.
+                Text(DemoServer.DEMO_BIBLE_ONLY, Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 LazyColumn {
                     itemsIndexed(loaded.verses, key = { i, _ -> "$ref:$i" }) { i, text ->

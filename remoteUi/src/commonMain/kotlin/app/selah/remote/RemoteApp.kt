@@ -1,6 +1,11 @@
 package app.selah.remote
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -87,9 +92,24 @@ internal fun RemoteApp(
     LaunchedEffect(linkKey) { if (linkKey != null) editingHost = false }
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
+    val isDemo = status is ConnectionStatus.Demo
+    // En la demostración se sigue buscando un computador de verdad: si aparece, se ofrece conectarse.
+    var foundWhileDemo by remember { mutableStateOf<FoundServer?>(null) }
+    LaunchedEffect(isDemo) {
+        foundWhileDemo = null
+        while (isDemo) {
+            client.discover().firstOrNull()?.let { foundWhileDemo = it }
+            kotlinx.coroutines.delay(5_000)
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        StatusBar(status, pcName, showSearch = !editingHost, onEdit = { editingHost = true })
+        StatusBar(status, pcName, showSearch = !editingHost, onEdit = {
+            client.stopDemo()
+            editingHost = true
+        })
         topBanner()
+        if (isDemo && !editingHost) DemoBanner(foundWhileDemo) { server -> editingHost = false; onConnect(server) }
         // El PC pide clave: se pregunta una vez y queda guardada.
         val auth by client.auth.collectAsState()
         var pinDismissed by remember(auth) { mutableStateOf(false) }
@@ -102,7 +122,10 @@ internal fun RemoteApp(
         }
         // Ojo: nada de "return" temprano dentro de Column (es inline y rompe la recomposición).
         if (editingHost) {
-            SearchScreen(client) { server -> editingHost = false; onConnect(server) }
+            SearchScreen(
+                client,
+                onDemo = { client.startDemo(); tab = 0; editingHost = false },
+            ) { server -> editingHost = false; onConnect(server) }
         } else {
             // Desplazable: en celulares angostos las pestañas no parten las palabras.
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
@@ -150,18 +173,19 @@ private fun StatusBar(status: ConnectionStatus, pcName: String, showSearch: Bool
         is ConnectionStatus.Connecting -> "Conectando $toPc…" to MaterialTheme.colorScheme.tertiary
         is ConnectionStatus.Connected -> "Conectado $toPc" to MaterialTheme.colorScheme.primary
         is ConnectionStatus.Failed -> "Sin conexión con $pc — reintentando" to MaterialTheme.colorScheme.error
+        ConnectionStatus.Demo -> "Demostración (sin computador)" to MaterialTheme.colorScheme.tertiary
     }
     Row(
         Modifier.fillMaxWidth().clickable(enabled = showSearch, onClick = onEdit).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, color = color, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (showSearch) Text("Buscar otro", color = MaterialTheme.colorScheme.primary)
+        if (showSearch) Text(if (status is ConnectionStatus.Demo) "Conectar" else "Buscar otro", color = MaterialTheme.colorScheme.primary)
     }
 }
 
 @Composable
-private fun SearchScreen(client: RemoteClient, onConnect: (FoundServer) -> Unit) {
+private fun SearchScreen(client: RemoteClient, onDemo: () -> Unit, onConnect: (FoundServer) -> Unit) {
     var found by remember { mutableStateOf<List<FoundServer>>(emptyList()) }
     var rounds by remember { mutableIntStateOf(0) }
     var restart by remember { mutableIntStateOf(0) }
@@ -182,13 +206,23 @@ private fun SearchScreen(client: RemoteClient, onConnect: (FoundServer) -> Unit)
     }
 
     Column(
-        Modifier.fillMaxWidth().padding(24.dp),
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (found.isEmpty()) {
-            CircularProgressIndicator(Modifier.padding(top = 24.dp))
-            Text("Buscando Selah…", style = MaterialTheme.typography.headlineSmall)
+            // Quien la acaba de instalar debe entender qué es y poder probarla aunque no haya un PC cerca.
+            Text("Selah", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "El control remoto de Selah, el programa gratuito que proyecta letras de canciones y la Biblia " +
+                    "desde el computador de la iglesia. Desde aquí pasas las estrofas, buscas canciones y muestras citas.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 16.sp,
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+                Text("Buscando Selah en este Wi-Fi…", Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium)
+            }
             if (rounds >= 3) {
                 Text(
                     "Revisa que:\n• Selah esté abierto en el computador\n• este equipo esté conectado al mismo Wi-Fi",
@@ -199,6 +233,7 @@ private fun SearchScreen(client: RemoteClient, onConnect: (FoundServer) -> Unit)
             // Si no lo encuentra solo (redes que bloquean la búsqueda, o el iPhone): la dirección
             // que aparece en el computador, en "Conectar tablets y celulares".
             ManualAddress(client, onConnect)
+            DemoCard(onDemo)
         } else {
             Text("¿A qué computador te conectas?", style = MaterialTheme.typography.headlineSmall)
             found.forEach { s ->
@@ -540,3 +575,58 @@ private fun ManualAddress(client: RemoteClient, onConnect: (FoundServer) -> Unit
     Button({ go() }, Modifier.fillMaxWidth(), enabled = valid && !checking) { Text(if (checking) "Probando…" else "Conectar") }
     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
+
+/** "¿No tienes Selah cerca?": probar con canciones de ejemplo, o instalar Selah en el computador. */
+@Composable
+private fun DemoCard(onDemo: () -> Unit) {
+    val uri = LocalUriHandler.current
+    Card(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("¿No hay un computador con Selah cerca?", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Pruébala con canciones y Biblia de ejemplo. Nada se proyecta: es solo para ver cómo funciona.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onDemo, Modifier.fillMaxWidth().height(56.dp)) { Text("Probar la demostración", fontSize = 17.sp) }
+            TextButton({ runCatching { uri.openUri(SELAH_WEB) } }, Modifier.fillMaxWidth()) {
+                Text("Instalar Selah en el computador (gratis)")
+            }
+        }
+    }
+}
+
+/** Aviso fijo en la demostración; si aparece un computador de verdad en el Wi-Fi, ofrece conectarse. */
+@Composable
+private fun DemoBanner(found: FoundServer?, onConnect: (FoundServer) -> Unit) {
+    var hidden by rememberSaveable { mutableStateOf(false) }
+    if (found != null) {
+        Card(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Encontré Selah en ${found.name}", Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                TextButton({ onConnect(found) }) { Text("Conectar") }
+            }
+        }
+    } else if (!hidden) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Esto es una demostración: elige una canción o una cita y pasa con ▶. En la iglesia, lo mismo se ve en el videobeam.",
+                Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 14.sp,
+            )
+            IconButton({ hidden = true }) { Text("✕") }
+        }
+    }
+}
+
+/** Página de Selah: qué es y cómo instalarlo en el computador. */
+internal const val SELAH_WEB = "https://oortega14.com/apps/selah"
