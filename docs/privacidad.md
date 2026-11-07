@@ -24,6 +24,8 @@ Estos datos quedan **solo en tu teléfono** y se borran al desinstalar la app.
 - La versión de Google Play **no usa internet**: solo la red local.
 - La versión que se descarga desde GitHub consulta una vez al abrirse si hay una versión nueva en
   `api.github.com` (no envía datos tuyos; GitHub puede registrar la dirección IP como cualquier sitio web).
+- El programa del computador usa internet solo cuando tú lo pides: para buscar fondos en Pixabay o
+  descargar Biblias gratuitas de eBible.org (no envía datos tuyos).
 
 ## Niños
 La app no está dirigida a niños y no recopila datos de nadie.
