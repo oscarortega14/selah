@@ -11,8 +11,8 @@ options:
 settings:
   base:
     # Misma versión que el PC y Android (gradle.properties → selah.version)
-    MARKETING_VERSION: "2.5.0"
-    CURRENT_PROJECT_VERSION: "20500"
+    MARKETING_VERSION: "2.5.1"
+    CURRENT_PROJECT_VERSION: "20501"
     # Escribe aquí tu Team ID de Apple (developer.apple.com → Membership), o elígelo en Xcode
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
