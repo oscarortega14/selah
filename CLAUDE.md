@@ -93,7 +93,7 @@ Por comentarios de los probadores:
   órdenes que el PC; `DemoContent.kt`: 6 canciones de letra original y 6 capítulos de la RV1909).
 - PC: **"＋ Más Biblias…"** (`BibleDownloads.kt`, `BiblesDialog.kt`): 12 traducciones libres de eBible.org
   (VPL) y agregar desde archivo (.txt VPL, .xml Zefania, .json, .zip). Solo traducciones repartibles gratis.
-Hecho: iPhone build 2.5.1 (20501) subido a App Store Connect; AAB 2.5.1 (20501) en el escritorio
+Hecho: iPhone build 2.5.1 (20502, con los arreglos adversariales; el 20501 no usar) subido a App Store Connect; AAB 2.5.1 (20501) en el escritorio
 (`~/Desktop/Selah Remoto - Google Play/`), con textos de "Qué hay de nuevo" para cada tienda.
 Falta: enviar a revisión (App Store y Play, el dueño); en Windows: `packageMsi` + firma + GitHub Release
 y `packageMsix` → Partner Center "Start update" (con permiso del dueño).
