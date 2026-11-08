@@ -32,6 +32,7 @@ Android: versionCode = a*10000+b*100+c. iOS: `iosApp/project.yml` (mantener igua
 ./gradlew :androidApp:bundlePlayRelease          # AAB para Google Play
 ./gradlew :desktopApp:packageMsi                 # instalador Windows (en Windows)
 ./gradlew :desktopApp:packageMsix                # paquete para Microsoft Store (en Windows)
+./gradlew :desktopApp:packageDmg                 # instalador para Mac (en una Mac; sin Developer ID → "Abrir igualmente")
 ./gradlew :remoteUi:linkDebugFrameworkIosSimulatorArm64   # iPhone (solo en Mac)
 cd iosApp && xcodegen                            # proyecto de Xcode
 ```
@@ -108,3 +109,13 @@ MSIX 2.6.0 → Partner Center "Start update".
 - **x**.0.0: algo deja de ser compatible (protocolo con apps viejas, formato de canciones, carpeta).
 Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
 distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
+
+## En main después de la 2.6.0 (sin publicar; sería la 2.7.0: funciones nuevas)
+- Carrusel de anuncios (`Presenter.startCarousel/tick`, `ClientMessage.StartCarousel/StopCarousel`,
+  `PresentationState.carouselSeconds`, `Library.features` con `FEATURE_CAROUSEL` para que la app solo lo ofrezca
+  a un PC que lo entiende).
+- Letra para la congregación (`Congregation.kt`, `/letra` + canal de solo lectura `/ws-letra`, QR en
+  "Conectar dispositivos" y botón para ponerlo en Anuncios).
+- Mac: `packageDmg` (Apple Silicon). Falta: certificado "Developer ID Application" (solo lo crea el titular de la
+  cuenta de Apple) + notarización, y armar también para Mac Intel si alguien lo necesita.
+
