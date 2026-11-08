@@ -228,10 +228,17 @@ class RemoteClient(private val scope: CoroutineScope) {
                         // (se queda la más rápida). Un PC viejo no entiende "ping" y lo ignora.
                         clock.reset()
                         val pinger = launch {
-                            repeat(10) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(150) }
-                            while (isActive) {
-                                delay(15_000)
-                                repeat(3) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(200) }
+                            // Si la conexión se cae mientras manda un ping, el ping simplemente termina: su error no
+                            // debe tumbar la reconexión.
+                            try {
+                                repeat(10) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(150) }
+                                while (isActive) {
+                                    delay(15_000)
+                                    repeat(3) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(200) }
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
                             }
                         }
                         try {
