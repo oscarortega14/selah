@@ -119,7 +119,7 @@ compose.desktop {
         jvmArgs += listOf("-Xmx512m", "-XX:MaxMetaspaceSize=192m")
         nativeDistributions {
             appResourcesRootDir.set(appResources)
-            targetFormats(TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "Selah"
             packageVersion = appVersion
             description = "Proyección de canciones y Biblia con control remoto"
@@ -128,6 +128,21 @@ compose.desktop {
             // Se incluye el entorno Java completo: el PC de la iglesia no necesita instalar nada más.
             includeAllModules = true
             linux { iconFile.set(project.file("src/main/resources/web/icons/icon-512.png")) }
+            // Mac: ./gradlew :desktopApp:packageDmg (en una Mac). Sale para el procesador de esa Mac
+            // (Apple Silicon o Intel). Sin certificado "Developer ID" macOS pide permiso la primera vez.
+            macOS {
+                bundleID = "app.selah.desktop"
+                iconFile.set(project.file("icons/selah.icns"))
+                dockName = "Selah"
+                appCategory = "public.app-category.productivity"
+                infoPlist {
+                    // macOS pide permiso para la red local: sin él, los celulares no encuentran ni controlan Selah.
+                    extraKeysRawXml = """
+                        <key>NSLocalNetworkUsageDescription</key>
+                        <string>Selah usa la red local para que los celulares y tablets de la iglesia lo encuentren y controlen la proyección.</string>
+                    """.trimIndent()
+                }
+            }
             windows {
                 iconFile.set(project.file("icons/selah.ico"))
                 menuGroup = "Selah"
@@ -141,8 +156,11 @@ compose.desktop {
     }
 }
 
-// El VLC incluido entra en el instalador de Windows y en `run` (para probar).
-tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareVlc) }
+// El VLC incluido entra en el instalador de Windows y en `run` (para probar). En Mac o Linux no hace
+// falta descargarlo: allí se usa el VLC instalado (si lo hay) para los fondos de video.
+if (System.getProperty("os.name").startsWith("Windows")) {
+    tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareVlc) }
+}
 
 // En Windows las pruebas usan el mismo VLC incluido que la app empaquetada.
 if (System.getProperty("os.name").startsWith("Windows")) {

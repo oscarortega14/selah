@@ -136,6 +136,14 @@ escenario, letras para OBS y búsquedas. Tras varios intentos fallidos la direcc
 Aun así, lo ideal es una red de la iglesia (o una aparte para el equipo de medios), no una red pública, y
 cambiar la clave si mucha gente la conoce.
 
+## En Mac
+
+Abre `Selah-<versión>.dmg` y arrastra Selah a **Aplicaciones**. Mientras Selah no tenga certificado "Developer ID"
+de Apple, la primera vez macOS dice que no puede verificarlo: ciérralo, ve a **Ajustes del Sistema → Privacidad y
+seguridad**, baja hasta "Selah" y toca **Abrir igualmente** (solo una vez). Cuando pregunte por la **red local**,
+elige **Permitir** (sin eso los celulares no lo encuentran). Para los fondos de video instala VLC (videolan.org).
+El `.dmg` sale para el procesador de la Mac donde se arma (Apple Silicon o Intel).
+
 ## Antes se llamaba Proyecta
 
 Hasta la versión 2.4 el programa se llamaba **Proyecta**. Al actualizar no se pierde nada:
@@ -181,4 +189,7 @@ adb install -r androidApp/build/outputs/apk/github/release/androidApp-github-rel
 ./gradlew :androidApp:bundlePlayRelease         # paquete para Google Play
 ./gradlew :desktopApp:packageMsi                # instalador para Windows (ejecutar en Windows; descarga WiX solo)
 # -> desktopApp/build/compose/binaries/main/msi/Selah-<versión>.msi (incluye Java: no hace falta instalarlo)
+
+./gradlew :desktopApp:packageDmg                # instalador para Mac (ejecutar en una Mac; sale para su procesador)
+# -> desktopApp/build/compose/binaries/main/dmg/Selah-<versión>.dmg (incluye Java)
 ```

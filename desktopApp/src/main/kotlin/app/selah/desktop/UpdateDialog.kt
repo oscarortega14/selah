@@ -51,7 +51,8 @@ fun UpdateDialog(
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 if (!Updater.canInstall) {
                     Text(
-                        "Esta copia no está instalada con el instalador (.msi): descarga la nueva desde GitHub.",
+                        if (System.getProperty("os.name").startsWith("Mac")) "En Mac: descarga el .dmg nuevo desde GitHub y arrástralo a Aplicaciones (reemplaza al anterior)."
+                        else "Esta copia no está instalada con el instalador (.msi): descarga la nueva desde GitHub.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

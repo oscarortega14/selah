@@ -13,6 +13,21 @@ import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
 
 /**
+ * Nombre del computador para mostrar en los celulares ("Conectado a PC-IGLESIA"). En la Mac el nombre de red
+ * suele salir como la IP: se usa el que el usuario ve en Ajustes ("Mac de Oscar").
+ */
+fun computerName(): String {
+    if (System.getProperty("os.name").startsWith("Mac")) {
+        runCatching {
+            val p = ProcessBuilder("scutil", "--get", "ComputerName").redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText().trim()
+            if (p.waitFor(5, TimeUnit.SECONDS) && p.exitValue() == 0 && out.isNotEmpty()) return out.take(60)
+        }
+    }
+    return runCatching { InetAddress.getLocalHost().hostName }.getOrDefault("Selah")
+}
+
+/**
  * Responde a los remotos que preguntan "¿dónde está Selah?" por la red local, para que la
  * tablet o el celular se conecten solos sin escribir la IP.
  */
@@ -20,7 +35,7 @@ class DiscoveryResponder(private val port: Int = DISCOVERY_PORT, private val wsP
     private var socket: DatagramSocket? = null
     private var thread: Thread? = null
 
-    val name: String = runCatching { InetAddress.getLocalHost().hostName }.getOrDefault("Selah")
+    val name: String = computerName()
 
     /** Puerto UDP en el que quedó escuchando (útil si se pidió 0 = cualquiera libre). */
     val boundPort: Int get() = socket?.localPort ?: -1

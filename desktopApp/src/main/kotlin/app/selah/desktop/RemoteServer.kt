@@ -55,7 +55,10 @@ class RemoteServer(
     /** Celulares de la congregación conectados ahora a la página de la letra. */
     private val viewers = java.util.concurrent.atomic.AtomicInteger(0)
     val congregationViewers: Int get() = viewers.get()
+    /** Nombre de red del equipo: sirve para revisar el encabezado Host (no es el que se muestra). */
     private val pcName: String = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrDefault("Selah")
+    /** Nombre que se muestra en los celulares ("Conectado a …"). */
+    private val displayName: String = computerName()
     private var engine: EmbeddedServer<*, *>? = null
 
     fun start() {
@@ -78,7 +81,7 @@ class RemoteServer(
             // Nombre del PC, para que la página muestre "Conectado a <nombre>".
             get("/info") {
                 call.respondText(
-                    ProtocolJson.encodeToString(DiscoveryReply.serializer(), DiscoveryReply(pcName, port)),
+                    ProtocolJson.encodeToString(DiscoveryReply.serializer(), DiscoveryReply(displayName, port)),
                     ContentType.Application.Json,
                 )
             }
