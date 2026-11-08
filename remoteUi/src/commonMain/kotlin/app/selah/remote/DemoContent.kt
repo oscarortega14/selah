@@ -7,6 +7,7 @@ package app.selah.remote
 internal val DEMO_SONGS: List<String> = listOf(
     """
 # Tu luz en mí
+BPM: 74
 
 Cuando la noche parece no acabar
 Tu voz me llama a despertar
@@ -28,6 +29,7 @@ Tu luz en mí, por siempre en mí
 """,
     """
 # Aquí estamos, Señor
+BPM: 68
 
 Aquí estamos, Señor, con el corazón abierto
 Venimos a adorarte, a cantarte otra vez
@@ -45,6 +47,7 @@ Que tu reino se vea en cada hogar
 """,
     """
 # Cantaré de tu amor
+BPM: 120
 
 Desde que sale el sol hasta que se pone
 Cantaré de tu amor, cantaré de tu amor
@@ -58,6 +61,7 @@ Cantaré de tu amor
 """,
     """
 # Refugio
+BPM: 64
 
 Eres mi refugio y mi fortaleza
 Mi pronto auxilio en la tribulación
@@ -70,6 +74,7 @@ Mi roca firme, mi salvación
 """,
     """
 # Nuevo amanecer
+BPM: 128
 
 Tus misericordias son nuevas cada mañana
 Un nuevo amanecer, una nueva canción
@@ -82,6 +87,7 @@ Que ha venido tu luz
 """,
     """
 # En tu presencia
+BPM: 60
 
 En tu presencia hay plenitud de gozo
 Delicias a tu diestra para siempre

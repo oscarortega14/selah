@@ -121,6 +121,11 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   `LocalWorship`). Línea `Tipo:` en las canciones (`Song.tags`, `Library.setSongTags`, solo en el encabezado).
   `SongSummary.lastSung` + `Library.repeatDays` y `Plan.todayService/todayList` para la app (campos con valor por
   defecto: compatibles con apps y PCs viejos).
+- Click de los músicos + letra automática (`shared/Click.kt`: `ClockSync` tipo NTP con Ping/Pong, `autoSlide`,
+  `timingFromRecording`; `PresentationState.click: ClickState`; `Presenter.startClick/tick/manualMove/finishRecording`;
+  líneas `BPM:`, `Compás:`, `Tiempos:`; sonido: `ClickPlayer.android.kt` (AudioTrack + getTimestamp),
+  `ClickPlayer.ios.kt` (AVAudioEngine con hora exacta), `escenario.html` (Web Audio)). El PC NO suena. `FEATURE_CLICK`.
+  Probado: emulador Android (pista activa, 0 underruns, ±3-4 ms) y vista de escenario. Falta: oído real con 2 equipos.
 - Mac: `packageDmg` (Apple Silicon). Falta: certificado "Developer ID Application" (solo lo crea el titular de la
   cuenta de Apple) + notarización, y armar también para Mac Intel si alguien lo necesita.
 

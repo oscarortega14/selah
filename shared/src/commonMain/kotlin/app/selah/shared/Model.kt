@@ -68,6 +68,8 @@ data class PresentationState(
     val lowerThirdSub: String = "",
     /** Carrusel de anuncios andando: cada cuántos segundos cambia la imagen (0 = no hay carrusel). */
     val carouselSeconds: Int = 0,
+    /** Click andando (metrónomo de los músicos), o null. Las apps viejas no lo conocen y lo ignoran. */
+    val click: ClickState? = null,
 ) {
     /** Segundos que lleva el predicador, o null si el temporizador no está andando. */
     fun timerElapsed(now: Long): Long? = timerStart?.let { ((now - it) / 1000).coerceAtLeast(0) }
@@ -112,6 +114,35 @@ data class PresentationState(
     val next: Slide? get() = slides.getOrNull(index + 1)
 }
 
+/**
+ * El click: el tiempo 0 de la canción cae en [startAt] (hora del PC, en ms); antes suenan [countIn] tiempos de
+ * cuenta. Cada celular calcula los tiempos con su reloj ajustado al del PC y suena solo: no viaja audio por la red.
+ */
+@Serializable
+data class ClickState(
+    val bpm: Int,
+    val beatsPerBar: Int = 4,
+    val startAt: Long,
+    val countIn: Int = 4,
+    /** Letra automática: la diapositiva cambia sola según "Tiempos:" de la canción. false = en pausa. */
+    val auto: Boolean = false,
+    /** ¿La canción tiene tiempos grabados? (para mostrar "Letra automática"). */
+    val hasTiming: Boolean = false,
+    /** Grabando en qué tiempo cambia cada diapositiva. */
+    val recording: Boolean = false,
+) {
+    val beatMs: Double get() = 60_000.0 / bpm
+
+    /** Tiempo (desde el 0 de la canción, con decimales; negativo en la cuenta) en la hora del PC [serverNow]. */
+    fun beatAt(serverNow: Long): Double = (serverNow - startAt) / beatMs
+
+    /** Hora del PC del tiempo [beat] (puede ser negativo: la cuenta). */
+    fun timeOfBeat(beat: Long): Long = startAt + kotlin.math.round(beat * beatMs).toLong()
+
+    /** "Compás 3 · tiempo 2" para la vista: compás (desde 1) y tiempo (desde 1) del tiempo [beat] (>= 0). */
+    fun barAndBeat(beat: Long): Pair<Long, Int> = (beat / beatsPerBar + 1) to (beat.mod(beatsPerBar.toLong()).toInt() + 1)
+}
+
 /** Una sección de canción: empieza en la diapositiva [start] y sigue hasta la próxima etiqueta. */
 data class Section(val label: String, val start: Int)
 
@@ -147,6 +178,12 @@ data class Song(
     val ccli: String? = null,
     /** Línea "Tipo:" (Alabanza, Adoración…). */
     val tags: List<String> = emptyList(),
+    /** Línea "BPM:" (tempo para el click), o null. */
+    val bpm: Int? = null,
+    /** Línea "Compás: 4/4" → tiempos por compás (4); null = no dice. */
+    val beatsPerBar: Int? = null,
+    /** Línea "Tiempos:": en qué tiempo empieza cada diapositiva (-1 = sin grabar). Vacío = no tiene. */
+    val timing: List<Int> = emptyList(),
 ) {
     fun summary() = SongSummary(id, title, slides.firstOrNull()?.text?.lineSequence()?.firstOrNull().orEmpty(), tags)
 }

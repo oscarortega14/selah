@@ -86,10 +86,10 @@ fun main() {
             }
         }
         val projectorScreen = chooseProjectorScreen(screens, settings.projectorScreen)
-        // Reloj del carrusel de anuncios: cambia la imagen cuando toca.
+        // Reloj del carrusel de anuncios y de la letra automática con el click.
         LaunchedEffect(Unit) {
             while (true) {
-                kotlinx.coroutines.delay(250)
+                kotlinx.coroutines.delay(50)
                 presenter.tick()
             }
         }

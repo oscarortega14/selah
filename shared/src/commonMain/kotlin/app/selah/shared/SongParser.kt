@@ -22,6 +22,8 @@ package app.selah.shared
  *   (de la carpeta Selah/fondos) solo para esta canción.
  * - Opcional, antes de la primera estrofa: "Tipo: Alabanza" (o "Tipo: Adoración, Navidad"): para las plantillas
  *   de los cultos y los filtros. No se proyecta.
+ * - Opcional, antes de la primera estrofa: "BPM: 72" y "Compás: 4/4" (para el click de los músicos) y
+ *   "Tiempos: 0 16 32 -1 48" (en qué tiempo empieza cada diapositiva; lo escribe Selah al grabar).
  * - Opcional, antes de la primera estrofa: "Autor: …" y "CCLI: 1234567" (número de la canción en CCLI,
  *   para el reporte de licencias). No se proyectan.
  * - Acordes (formato ChordPro) justo antes de la sílaba: "[G]Cuán grande es [C]Él". En el videobeam
@@ -32,6 +34,9 @@ object SongParser {
     private const val MAX_LABEL = 30
     private val ORDER_LINE = Regex("""^orden\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val BACKGROUND_LINE = Regex("""^fondo\s*:(.*)$""", RegexOption.IGNORE_CASE)
+    private val BPM_LINE = Regex("""^bpm\s*:\s*(\d{2,3})\s*$""", RegexOption.IGNORE_CASE)
+    private val METER_LINE = Regex("""^comp[aá]s\s*:\s*(\d{1,2})\s*/\s*(\d{1,2})\s*$""", RegexOption.IGNORE_CASE)
+    private val TIMING_LINE = Regex("""^tiempos\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val TYPE_LINE = Regex("""^tipos?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val AUTHOR_LINE = Regex("""^autor(?:es)?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val CCLI_LINE = Regex("""^ccli\s*(?:#|n[ºo°.]*)?\s*:?\s*(\d{1,10})\s*$""", RegexOption.IGNORE_CASE)
@@ -50,6 +55,9 @@ object SongParser {
         var author: String? = null
         var ccli: String? = null
         var tags: List<String>? = null
+        var bpm: Int? = null
+        var beatsPerBar: Int? = null
+        var timing: List<Int>? = null
 
         for (raw in text.removePrefix("﻿").replace("\r\n", "\n").replace('\r', '\n').split('\n')) {
             val line = raw.trim()
@@ -72,6 +80,19 @@ object SongParser {
             val authorMatch = AUTHOR_LINE.matchEntire(line)
             if (authorMatch != null && author == null && beforeLyrics) {
                 author = authorMatch.groupValues[1].trim().ifEmpty { null }
+                continue
+            }
+            if (beforeLyrics && bpm == null) BPM_LINE.matchEntire(line)?.let { m ->
+                bpm = m.groupValues[1].toInt().takeIf { it in CLICK_MIN_BPM..CLICK_MAX_BPM }
+                continue
+            }
+            if (beforeLyrics && beatsPerBar == null) METER_LINE.matchEntire(line)?.let { m ->
+                beatsPerBar = m.groupValues[1].toInt().takeIf { it in 1..16 }
+                continue
+            }
+            if (beforeLyrics && timing == null) TIMING_LINE.matchEntire(line)?.let { m ->
+                timing = m.groupValues[1].split(' ', ',', ';').filter { it.isNotBlank() }.take(MAX_SLIDES)
+                    .map { it.trim().toIntOrNull()?.takeIf { n -> n in 0..100_000 } ?: -1 }
                 continue
             }
             val typeMatch = TYPE_LINE.matchEntire(line)
@@ -102,7 +123,10 @@ object SongParser {
             withChords(label, lines)
         }
         val song = if (order.isNullOrEmpty()) Song(id, title, slides) else expand(id, title, slides, order)
-        return song.copy(background = background, author = author, ccli = ccli, tags = tags.orEmpty())
+        return song.copy(
+            background = background, author = author, ccli = ccli, tags = tags.orEmpty(),
+            bpm = bpm, beatsPerBar = beatsPerBar, timing = timing.orEmpty(),
+        )
     }
 
     /** "Alabanza, adoración" → ["Alabanza", "adoración"] (sin repetir, ignorando mayúsculas y tildes). */

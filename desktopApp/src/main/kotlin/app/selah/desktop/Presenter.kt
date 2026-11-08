@@ -3,7 +3,13 @@ package app.selah.desktop
 import app.selah.shared.ClientMessage
 import app.selah.shared.CAROUSEL_MAX_SECONDS
 import app.selah.shared.CAROUSEL_MIN_SECONDS
+import app.selah.shared.CLICK_MAX_BPM
+import app.selah.shared.CLICK_MIN_BPM
+import app.selah.shared.ClickState
 import app.selah.shared.PresentationState
+import app.selah.shared.autoSlide
+import app.selah.shared.timingFromRecording
+import app.selah.shared.usableTiming
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,12 +44,26 @@ class Presenter(
     @Synchronized
     fun handle(msg: ClientMessage): String? = handleInner(msg).also { err -> if (err != null) Log.warn("Orden ${msg::class.simpleName}: $err") }
 
-    private fun handleInner(msg: ClientMessage): String? = when (msg) {
+    private fun handleInner(msg: ClientMessage): String? {
+        // Grabando tiempos y se cambia de canción (o de lo que está en pantalla): se guarda lo grabado antes.
+        if (_state.value.click?.recording == true && msg.replacesContent()) finishRecording()
+        return handleCommand(msg)
+    }
+
+    private fun ClientMessage.replacesContent() = this is ClientMessage.SelectSong || this is ClientMessage.ShowBible ||
+        this is ClientMessage.ShowMedia || this is ClientMessage.ShowPresentation || this is ClientMessage.ShowSermon || this is ClientMessage.StartCarousel
+
+    private fun handleCommand(msg: ClientMessage): String? = when (msg) {
         is ClientMessage.SelectSong -> selectSong(msg.id)
-        is ClientMessage.GoTo -> { _state.update { s -> if (msg.index in s.slides.indices) s.copy(index = msg.index) else s }; null }
+        is ClientMessage.GoTo -> { manualMove { s -> if (msg.index in s.slides.indices) s.copy(index = msg.index) else s }; null }
         // Con el carrusel andando, Siguiente/Anterior pasan de imagen (y el tiempo vuelve a empezar).
-        ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { _state.update { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
-        ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { _state.update { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
+        ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { manualMove { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
+        ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { manualMove { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
+        is ClientMessage.StartClick -> startClick(msg.bpm, msg.beatsPerBar)
+        ClientMessage.StopClick -> { if (_state.value.click?.recording == true) finishRecording(); _state.update { it.copy(click = null) }; null }
+        is ClientMessage.SetTempo -> setTempo(msg.bpm)
+        is ClientMessage.SetAutoLyrics -> { _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = msg.on && c.hasTiming && !c.recording)) } ?: s }; followClick(); null }
+        is ClientMessage.RecordTiming -> if (msg.on) startRecording() else finishRecording()
         is ClientMessage.StartCarousel -> startCarousel(msg.seconds, msg.names)
         ClientMessage.StopCarousel -> { _state.update { it.copy(carouselSeconds = 0) }; null }
         is ClientMessage.SetBlank -> { _state.update { it.copy(blank = msg.blank) }; null }
@@ -64,6 +84,87 @@ class Presenter(
         ClientMessage.StopTimer -> { _state.update { it.copy(timerStart = null, timerMinutes = 0) }; null }
         // Las órdenes de la lista del culto las atiende ServicePlan (ver Commands).
         else -> "Orden no soportada aquí"
+    }
+
+    // --- Click de los músicos y letra automática ---
+    /** "Tiempos:" de la canción con el click andando (para la letra automática). */
+    private var clickTiming: List<Int> = emptyList()
+    /** Grabando: diapositiva → tiempo en que apareció. */
+    private val recorded = mutableMapOf<Int, Int>()
+
+    private fun startClick(bpmWanted: Int, beatsWanted: Int): String? {
+        val s = _state.value
+        val song = s.songId?.takeIf { !s.isBible && !s.sermon }?.let { library.song(it) }
+        val bpm = bpmWanted.takeIf { it > 0 } ?: song?.bpm ?: return "Escribe el tempo (BPM) o ponlo en la canción con la línea \"BPM: 72\""
+        if (bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) return "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
+        val beats = beatsWanted.takeIf { it in 1..16 } ?: song?.beatsPerBar ?: 4
+        clickTiming = song?.timing.orEmpty()
+        val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
+        // Un compás de cuenta, y un momento para que la orden llegue a todos los celulares antes.
+        val start = clock() + CLICK_LEAD_MS + Math.round(beats * 60_000.0 / bpm)
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn = beats, auto = hasTiming, hasTiming = hasTiming)) }
+        return null
+    }
+
+    /** Cambia el tempo sin saltarse: el tiempo en que va sigue siendo el mismo. */
+    private fun setTempo(bpm: Int): String? {
+        if (bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) return "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
+        _state.update { s ->
+            val c = s.click ?: return@update s
+            val now = clock()
+            val beat = c.beatAt(now)
+            s.copy(click = c.copy(bpm = bpm, startAt = now - Math.round(beat * 60_000.0 / bpm)))
+        }
+        return null
+    }
+
+    /** Un cambio de diapositiva a mano: pausa la letra automática (no le pelea al operador) o queda grabado. */
+    private fun manualMove(change: (PresentationState) -> PresentationState) {
+        _state.update { s ->
+            val moved = change(s)
+            val c = s.click ?: return@update moved
+            if (c.recording) {
+                if (moved.index != s.index && moved.index >= 0) recorded[moved.index] = Math.round(c.beatAt(clock())).toInt().coerceAtLeast(0)
+                moved
+            } else moved.copy(click = c.copy(auto = false))
+        }
+    }
+
+    private fun startRecording(): String? {
+        val s = _state.value
+        val c = s.click ?: return "Primero inicia el click"
+        if (s.songId == null || s.isBible || s.sermon || s.media != null || s.presentation != null) return "Solo se graban los tiempos de una canción"
+        recorded.clear()
+        if (s.index >= 0) recorded[s.index] = Math.round(c.beatAt(clock())).toInt().coerceAtLeast(0)
+        _state.update { it.copy(click = c.copy(recording = true, auto = false)) }
+        return null
+    }
+
+    /** Termina de grabar y guarda la línea "Tiempos:" en la canción. */
+    private fun finishRecording(): String? {
+        val s = _state.value
+        val c = s.click ?: return null
+        if (!c.recording) return null
+        val timing = timingFromRecording(s.slides.size, recorded)
+        recorded.clear()
+        val id = s.songId
+        if (id == null || !usableTiming(timing)) {
+            _state.update { it.copy(click = c.copy(recording = false)) }
+            return "Grabación muy corta: pasa al menos dos diapositivas con el click andando"
+        }
+        val error = runCatching { library.setSongTiming(id, timing); null }.getOrElse { "No pude guardar los tiempos: ${it.message}" }
+        if (error == null) clickTiming = timing
+        _state.update { it.copy(click = c.copy(recording = false, hasTiming = error == null || c.hasTiming)) }
+        return error
+    }
+
+    /** Letra automática: pone la diapositiva que corresponde al tiempo en que va el click. */
+    private fun followClick() {
+        val s = _state.value
+        val c = s.click ?: return
+        if (!c.auto || c.recording) return
+        val target = autoSlide(clickTiming, c.beatAt(clock())) ?: return
+        if (target != s.index && target in s.slides.indices) _state.update { it.copy(index = target) }
     }
 
     private fun selectSong(id: String): String? {
@@ -194,6 +295,7 @@ class Presenter(
     @Synchronized
     fun tick() {
         if (_state.value.carouselSeconds > 0 && clock() >= carouselNextAt) carouselStep(+1)
+        followClick()
     }
 
     private fun isImage(name: String) = name.substringAfterLast('.', "").lowercase() in Library.IMAGE_EXTENSIONS
@@ -220,4 +322,9 @@ class Presenter(
         lowerThirdSub = lowerThirdSub,
         logo = false,
     )
+
+    companion object {
+        /** Tiempo para que la orden de empezar llegue a todos los celulares antes de la cuenta. */
+        const val CLICK_LEAD_MS = 1_200L
+    }
 }

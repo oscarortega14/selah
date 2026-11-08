@@ -5,6 +5,10 @@ import app.selah.shared.Bible
 import app.selah.shared.CAROUSEL_MAX_SECONDS
 import app.selah.shared.CAROUSEL_MIN_SECONDS
 import app.selah.shared.FEATURE_CAROUSEL
+import app.selah.shared.FEATURE_CLICK
+import app.selah.shared.CLICK_MAX_BPM
+import app.selah.shared.CLICK_MIN_BPM
+import app.selah.shared.ClickState
 import app.selah.shared.BibleReference
 import app.selah.shared.ClientMessage
 import app.selah.shared.PlanItem
@@ -56,7 +60,7 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             announcements = announcements,
             bibleNames = listOf(bible.name),
             presentations = presentations,
-            features = listOf(FEATURE_CAROUSEL),
+            features = listOf(FEATURE_CAROUSEL, FEATURE_CLICK),
         ),
         planMessage(),
         stateMessage(),
@@ -126,6 +130,27 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             }
             // Una sola traducción, sin clave: no hay nada que hacer.
             is ClientMessage.SelectBible, is ClientMessage.SetSecondBible, is ClientMessage.Hello, is ClientMessage.Login -> null
+            // Click de los músicos (suena en este celular con audífonos); sin grabar tiempos en la demostración.
+            is ClientMessage.StartClick -> {
+                val song = songs.find { it.id == state.songId }
+                val bpm = msg.bpm.takeIf { it > 0 } ?: song?.bpm ?: 72
+                if (bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
+                else {
+                    val beats = msg.beatsPerBar.takeIf { it in 1..16 } ?: song?.beatsPerBar ?: 4
+                    state = state.copy(click = ClickState(bpm, beats, clock() + 600 + kotlin.math.round(beats * 60_000.0 / bpm).toLong(), countIn = beats))
+                    null
+                }
+            }
+            ClientMessage.StopClick -> { state = state.copy(click = null); null }
+            is ClientMessage.SetTempo -> state.click?.let { c ->
+                if (msg.bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) return@let "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
+                val now = clock()
+                state = state.copy(click = c.copy(bpm = msg.bpm, startAt = now - kotlin.math.round(c.beatAt(now) * 60_000.0 / msg.bpm).toLong()))
+                null
+            }
+            is ClientMessage.SetAutoLyrics -> null
+            is ClientMessage.RecordTiming -> if (msg.on) "En la demostración no se graban tiempos: hazlo con el computador" else null
+            is ClientMessage.Ping -> return listOf(ServerMessage.Pong(msg.clientTime, clock()))
         }
         return buildList {
             if (error != null) add(ServerMessage.Error(error))

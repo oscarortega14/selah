@@ -68,9 +68,14 @@ class RemoteClient(private val scope: CoroutineScope) {
     private val _bibleResults = MutableStateFlow<ServerMessage.BibleResults?>(null)
     val bibleResults: StateFlow<ServerMessage.BibleResults?> = _bibleResults.asStateFlow()
 
-    /** Hora del PC - hora de la tablet, para mostrar bien la cuenta regresiva. */
-    @Volatile var serverOffset: Long = 0
-        private set
+    /** Reloj del PC sincronizado (como NTP): para la cuenta regresiva y el click de los músicos. */
+    private val clock = app.selah.shared.ClockSync()
+
+    /** Hora del PC − hora de la tablet (ms). */
+    val serverOffset: Long get() = clock.offset
+
+    /** Ida y vuelta más corta medida con el PC (ms), o null: qué tan preciso puede ser el click. */
+    val clockRtt: Long? get() = clock.bestRtt
 
     private val _plan = MutableStateFlow(ServicePlanState())
     val plan: StateFlow<ServicePlanState> = _plan.asStateFlow()
@@ -195,7 +200,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
         _plan.value = ServicePlanState(); _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
         _auth.value = null
-        serverOffset = 0
+        clock.reset()
     }
 
     fun connect(initialHost: String) {
@@ -219,6 +224,16 @@ class RemoteClient(private val scope: CoroutineScope) {
                         // Que el PC no repita el texto de todas las diapositivas en cada "Siguiente".
                         send(Frame.Text(ClientMessage.Hello(listOf(app.selah.shared.FEATURE_KEEP_SLIDES, app.selah.shared.FEATURE_PRESENTATIONS)).encode()))
                         val sender = launch { for (m in queue) send(Frame.Text(m.encode())) }
+                        // Sincronizar el reloj con el PC: varias idas y vueltas al conectarse y luego de vez en cuando
+                        // (se queda la más rápida). Un PC viejo no entiende "ping" y lo ignora.
+                        clock.reset()
+                        val pinger = launch {
+                            repeat(10) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(150) }
+                            while (isActive) {
+                                delay(15_000)
+                                repeat(3) { send(Frame.Text(ClientMessage.Ping(nowMillis()).encode())); delay(200) }
+                            }
+                        }
                         try {
                             for (frame in incoming) {
                                 // Un mensaje que no se entiende (de un PC más nuevo, o dañado) se salta: no se corta la conexión.
@@ -226,6 +241,7 @@ class RemoteClient(private val scope: CoroutineScope) {
                             }
                         } finally {
                             sender.cancel()
+                            pinger.cancel()
                         }
                     }
                     _status.value = ConnectionStatus.Failed(host, "Se cerró la conexión")
@@ -309,13 +325,14 @@ class RemoteClient(private val scope: CoroutineScope) {
             }
             is ServerMessage.BibleChapter -> _bibleChapter.value = m
             is ServerMessage.State -> {
-                if (m.serverNow > 0) serverOffset = m.serverNow - nowMillis()
+                clock.roughFromState(m.serverNow, nowMillis())
                 _state.value = app.selah.shared.mergeState(_state.value, m)
             }
             is ServerMessage.BibleResults -> _bibleResults.value = m
             is ServerMessage.SongResults -> _songResults.value = m
             is ServerMessage.Plan -> { _plan.value = m.plan; _savedLists.value = m.saved; _today.value = m.todayService to m.todayList }
             is ServerMessage.Error -> _errors.tryEmit(m.message)
+            is ServerMessage.Pong -> clock.add(m.clientTime, m.serverTime, nowMillis())
             is ServerMessage.Auth -> {
                 if (m.ok) {
                     // Se guarda solo si la aceptó el mismo computador al que se le mandó.

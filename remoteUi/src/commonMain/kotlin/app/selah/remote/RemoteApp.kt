@@ -138,7 +138,11 @@ internal fun RemoteApp(
             }
             Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
                 when (tab) {
-                    0 -> LiveTab(state, client::send)
+                    0 -> {
+                        // Click de los músicos: solo con un PC que lo entiende.
+                        if (app.selah.shared.FEATURE_CLICK in features) ClickPanel(state.click, { client.serverOffset }, client::send) { client.clockRtt }
+                        LiveTab(state, client::send)
+                    }
                     1 -> SongsTab(songs, songResults, repeatDays, onSearch = { q -> client.send(ClientMessage.SongSearch(q)) }, onAdd = { id -> client.send(ClientMessage.PlanAddSong(id)) }) { id ->
                         client.send(ClientMessage.SelectSong(id)); tab = 0
                     }

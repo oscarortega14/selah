@@ -40,12 +40,20 @@
   .seg { display:inline-block; vertical-align:bottom; white-space:pre; }
   .ch { display:block; color:#ffd54f; font-size:.62em; font-weight:700; line-height:1.15; min-height:1.15em; }
   #status { position:fixed; right:1vw; bottom:1vh; color:#c62828; font-size:2vh; }
+  /* Click de los músicos: pulso visual (más fuerte en el 1) y sonido opcional con audífonos */
+  #clickBar { display:none; align-items:center; gap:1.5vw; font-size:3vh; color:#ccc; }
+  #pulse { width:4vh; height:4vh; border-radius:50%; background:#4f378b; opacity:.2; }
+  #beatTxt { font-variant-numeric:tabular-nums; min-width:22vw; }
+  #clickSound { background:#222; color:#ddd; border:1px solid #444; border-radius:8px; font-size:2.4vh; padding:.3vh .8vw; }
+  #clickSound.on { background:#80deea; color:#000; border-color:#80deea; }
 </style>
 </head>
 <body>
 <div id="top"><span id="title"></span><span id="section"></span>
   <span id="chordBar"><button id="chordsBtn">Acordes</button><button id="down">♭</button><span id="key"></span><button id="up">♯</button></span>
   <span id="badge">NEGRO</span><span id="clock"></span></div>
+<div id="clickBar"><span id="pulse"></span><span id="beatTxt"></span><span id="bpmTxt"></span>
+  <button id="clickSound">🎧 Escuchar el click</button></div>
 <div id="msg"></div>
 <div id="alert"></div>
 <div id="cd"></div>
@@ -177,6 +185,58 @@ function tick() {
   $("clock").textContent = d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
 }
 setInterval(tick, 1000); tick();
+
+// --- Click de los músicos ---
+// Cada página calcula los tiempos con su reloj ajustado al del PC (S.serverOffset): no viaja audio por la red.
+let audio = null, scheduled = new Set(), clickKey = "";
+function clickBeat(c) { return (Date.now() + S.serverOffset - c.startAt) / (60000 / c.bpm); }
+function frame() {
+  const c = S.state.click;
+  $("clickBar").style.display = c ? "flex" : "none";
+  if (c) {
+    const b = clickBeat(c), whole = Math.floor(b), phase = b - whole;
+    const down = ((whole % c.beatsPerBar) + c.beatsPerBar) % c.beatsPerBar === 0;
+    $("pulse").style.background = down ? "#ffd54f" : "#80deea";
+    $("pulse").style.opacity = Math.max(0.15, 1 - phase * 3);
+    $("beatTxt").textContent = whole < 0 ? "Cuenta " + (c.countIn + whole + 1)
+      : "Compás " + (Math.floor(whole / c.beatsPerBar) + 1) + " · " + (((whole % c.beatsPerBar) + c.beatsPerBar) % c.beatsPerBar + 1);
+    $("bpmTxt").textContent = "♩ " + c.bpm;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// Sonido (Web Audio): cada "toc" se programa con su hora exacta, con medio segundo de anticipación.
+function scheduleClicks() {
+  const c = S.state.click;
+  if (!audio || !c) return;
+  const key = c.startAt + "/" + c.bpm + "/" + c.beatsPerBar;
+  if (key !== clickKey) { clickKey = key; scheduled = new Set(); }
+  const beatMs = 60000 / c.bpm, nowServer = Date.now() + S.serverOffset;
+  const latency = (audio.outputLatency || audio.baseLatency || 0);
+  let beat = Math.max(-c.countIn, Math.ceil((nowServer + 20 - c.startAt) / beatMs));
+  for (; c.startAt + beat * beatMs < nowServer + 600; beat++) {
+    if (scheduled.has(beat)) continue;
+    scheduled.add(beat);
+    const when = audio.currentTime + (c.startAt + beat * beatMs - nowServer) / 1000 - latency;
+    if (when < audio.currentTime) continue;
+    const down = ((beat % c.beatsPerBar) + c.beatsPerBar) % c.beatsPerBar === 0;
+    const osc = audio.createOscillator(), gain = audio.createGain();
+    osc.frequency.value = down ? 1760 : 1175;
+    gain.gain.setValueAtTime(down ? 0.9 : 0.7, when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + 0.03);
+    osc.connect(gain).connect(audio.destination);
+    osc.start(when); osc.stop(when + 0.035);
+  }
+}
+setInterval(scheduleClicks, 100);
+$("clickSound").onclick = () => {
+  // El navegador solo deja sonar después de un toque: aquí se crea el audio.
+  if (audio) { audio.close(); audio = null; $("clickSound").classList.remove("on"); $("clickSound").textContent = "🎧 Escuchar el click"; return; }
+  audio = new (window.AudioContext || window.webkitAudioContext)();
+  clickKey = "";
+  $("clickSound").classList.add("on"); $("clickSound").textContent = "🎧 Sonando (tocar para callar)";
+};
 window.addEventListener("resize", render);
 
 P.on("state", render);

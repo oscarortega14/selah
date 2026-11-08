@@ -551,6 +551,7 @@ private fun LivePanel(state: PresentationState, modifier: Modifier, send: (Clien
                 Text(if (state.logo) "Quitar logo" else "Logo (L)")
             }
         }
+        ClickBar(state.click, isSong = state.songId != null && !state.isBible && !state.sermon && state.media == null && state.presentation == null, send = send)
         HorizontalDivider()
         Row(
             Modifier.fillMaxWidth().handClickable { avisosOpen = !avisosOpen }.padding(vertical = 4.dp),

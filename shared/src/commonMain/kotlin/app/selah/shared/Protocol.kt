@@ -140,6 +140,33 @@ sealed interface ClientMessage {
     @Serializable @SerialName("carousel_stop")
     data object StopCarousel : ClientMessage
 
+    /**
+     * Click (metrónomo) para los músicos: suena en los celulares con audífonos, nunca en el PC.
+     * [bpm] 0 = el de la canción en pantalla (línea "BPM:"); [beatsPerBar] 0 = el de la canción (o 4).
+     * Solo para un PC que dice [FEATURE_CLICK].
+     */
+    @Serializable @SerialName("click_start")
+    data class StartClick(val bpm: Int = 0, val beatsPerBar: Int = 0) : ClientMessage
+
+    @Serializable @SerialName("click_stop")
+    data object StopClick : ClientMessage
+
+    /** Cambiar el tempo sin cortar el click (sigue en el mismo tiempo del compás). */
+    @Serializable @SerialName("click_tempo")
+    data class SetTempo(val bpm: Int) : ClientMessage
+
+    /** Letra automática con el click (si la canción tiene "Tiempos:"): true = seguir, false = pausar. */
+    @Serializable @SerialName("auto_lyrics")
+    data class SetAutoLyrics(val on: Boolean) : ClientMessage
+
+    /** Grabar en qué tiempo cambia cada diapositiva (con el click andando); al detener se guarda en la canción. */
+    @Serializable @SerialName("record_timing")
+    data class RecordTiming(val on: Boolean) : ClientMessage
+
+    /** Para sincronizar relojes: el PC responde [ServerMessage.Pong] con su hora. Se permite sin clave. */
+    @Serializable @SerialName("ping")
+    data class Ping(val clientTime: Long) : ClientMessage
+
     /** Proyectar una predicación (archivo de la carpeta predicaciones). */
     @Serializable @SerialName("sermon")
     data class ShowSermon(val id: String) : ClientMessage
@@ -242,6 +269,10 @@ sealed interface ServerMessage {
     @Serializable @SerialName("error")
     data class Error(val message: String) : ServerMessage
 
+    /** Respuesta a [ClientMessage.Ping]: con la ida y vuelta más corta se calcula la diferencia de relojes. */
+    @Serializable @SerialName("pong")
+    data class Pong(val clientTime: Long, val serverTime: Long) : ServerMessage
+
     /**
      * ¿Puede este dispositivo controlar? Llega al conectarse, al mandar la clave y si la clave cambia.
      * [required] el PC pide clave; [ok] ya la dio (o no hace falta); [message] por qué no.
@@ -252,6 +283,11 @@ sealed interface ServerMessage {
 
 /** Capacidad de Hello: entiende State.keepSlides. */
 const val FEATURE_KEEP_SLIDES = "keepSlides"
+
+/** Capacidad del PC (Library.features): click sincronizado, letra automática y Ping/Pong. */
+const val FEATURE_CLICK = "click"
+const val CLICK_MIN_BPM = 30
+const val CLICK_MAX_BPM = 250
 
 /** Capacidad del PC (Library.features): entiende StartCarousel/StopCarousel. */
 const val FEATURE_CAROUSEL = "carousel"

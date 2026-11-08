@@ -274,6 +274,11 @@ class RemoteServer(
                             send(Frame.Text(bibleChapter(library, msg.book, msg.chapter).encode()))
                             continue
                         }
+                        if (msg is ClientMessage.Ping) {
+                            // Para sincronizar relojes (el click de los músicos): la hora del PC, sin clave.
+                            send(Frame.Text(ServerMessage.Pong(msg.clientTime, System.currentTimeMillis()).encode()))
+                            continue
+                        }
                         if (msg is ClientMessage.Hello) {
                             lean.set(app.selah.shared.FEATURE_KEEP_SLIDES in msg.features)
                             knowsPresentations.value = app.selah.shared.FEATURE_PRESENTATIONS in msg.features
@@ -308,7 +313,7 @@ class RemoteServer(
         const val MAX_UPLOAD = 300_000_000L
 
         /** Lo que este PC sabe hacer además de lo básico: las apps solo ofrecen eso si aparece aquí. */
-        val SERVER_FEATURES = listOf(app.selah.shared.FEATURE_CAROUSEL)
+        val SERVER_FEATURES = listOf(app.selah.shared.FEATURE_CAROUSEL, app.selah.shared.FEATURE_CLICK)
         private val uploadSlots = kotlinx.coroutines.sync.Semaphore(3)
 
         /** Tope de toda la carpeta de anuncios al subir desde la red (para que nadie llene el disco). */

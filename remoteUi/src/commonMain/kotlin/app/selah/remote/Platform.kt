@@ -25,6 +25,32 @@ expect fun platformHttpClient(config: HttpClientConfig<*>.() -> Unit): HttpClien
  */
 expect suspend fun discoverServers(timeoutMs: Long): List<FoundServer>
 
+/**
+ * Click de los músicos en este celular (con audífonos con cable: los Bluetooth atrasan). Cada sistema genera el
+ * sonido y lo programa para que caiga justo en el tiempo del PC: [serverOffset] = hora del PC − hora local.
+ * null = callado.
+ */
+expect class ClickPlayer() {
+    fun update(click: app.selah.shared.ClickState?, serverOffset: Long)
+    fun release()
+}
+
+/**
+ * El sonido del click: un "toc" corto (seno con caída rápida). [accent] = primer tiempo del compás (más agudo).
+ * Muestras de -1 a 1 a [sampleRate].
+ */
+fun clickSamples(sampleRate: Int, accent: Boolean): FloatArray {
+    val n = sampleRate * 30 / 1000 // 30 ms
+    val freq = if (accent) 1760.0 else 1175.0
+    return FloatArray(n) { i ->
+        val t = i.toDouble() / sampleRate
+        (kotlin.math.sin(2 * kotlin.math.PI * freq * t) * kotlin.math.exp(-t * 140) * if (accent) 0.9 else 0.7).toFloat()
+    }
+}
+
+/** ¿El tiempo [beat] (puede ser negativo: la cuenta) es el primero de su compás? */
+fun isDownbeat(beat: Long, beatsPerBar: Int): Boolean = beat.mod(beatsPerBar.toLong()) == 0L
+
 /** Un archivo elegido por el usuario para subir (foto o video). */
 class PickedFile(val name: String, val size: Long?, val open: () -> ByteReadChannel)
 

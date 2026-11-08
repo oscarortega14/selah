@@ -133,6 +133,13 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   "Tipo" en la lista de canciones. Filtros por tipo y "Sin cantar hace tiempo".
 - **Canciones repetidas**: al agregar una que se cantó hace poco (14 días por defecto, se cambia en "Cultos…") sale un
   aviso; se agrega igual. La app del celular muestra "cantada hace 6 días" en cada canción.
+- **Click para los músicos** (sin consola digital): el baterista lo inicia desde la app ("♩ Click para los músicos")
+  y suena **en los celulares con audífonos con cable**, todos a la vez; en el computador no suena (nunca sale por los
+  parlantes). Cada celular genera su propio click con el reloj sincronizado con el PC (precisión típica ±5 ms en
+  Wi-Fi). La vista de escenario muestra el pulso y también puede sonar. Tempo con la línea `BPM: 72` y `Compás: 4/4`.
+- **Letra automática con el click**: con el click andando, "● Grabar tiempos" anota en qué tiempo cambia cada estrofa
+  (línea `Tiempos:` en la canción). Desde ahí la letra pasa sola, medio tiempo antes; si el operador toca algo a mano
+  se pausa ("▶ Retomar" vuelve a seguir la música).
 - **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
   (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
   desde la app y el control web.

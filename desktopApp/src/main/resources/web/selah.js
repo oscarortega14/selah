@@ -14,7 +14,8 @@ const Selah = (() => {
     serverOffset: 0, // hora del PC - hora local, para la cuenta regresiva
   };
   const listeners = {};
-  let ws = null;
+  let ws = null, syncSamples = [], syncTimer = null;
+  function ping() { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "ping", clientTime: Date.now() })); }
 
   function on(event, fn) { (listeners[event] = listeners[event] || []).push(fn); }
   function emit(event, arg) { (listeners[event] || []).forEach((fn) => fn(arg)); }
@@ -26,17 +27,31 @@ const Selah = (() => {
       S.connected = true;
       // Decirle al PC que entendemos "keepSlides": así no repite el texto en cada "Siguiente".
       ws.send(JSON.stringify({ type: "hello", features: ["keepSlides", "presentations"] }));
+      // Sincronizar el reloj con el PC (para la cuenta regresiva y el click): varias idas y vueltas, se queda la más rápida.
+      syncSamples = [];
+      for (let i = 0; i < 10; i++) setTimeout(ping, i * 150);
+      clearInterval(syncTimer);
+      syncTimer = setInterval(() => { for (let i = 0; i < 3; i++) setTimeout(ping, i * 200); }, 15000);
       emit("status");
     };
-    ws.onclose = () => { S.connected = false; emit("status"); setTimeout(connect, 2000); };
+    ws.onclose = () => { S.connected = false; clearInterval(syncTimer); emit("status"); setTimeout(connect, 2000); };
     ws.onerror = () => ws.close();
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.type === "state") {
         if (m.keepSlides) m.state.slides = S.state.slides; // solo cambió la posición: el texto ya lo tenemos
         S.state = m.state;
-        if (m.serverNow) S.serverOffset = m.serverNow - Date.now();
+        if (m.serverNow && !syncSamples.length) S.serverOffset = m.serverNow - Date.now(); // aproximado, hasta el primer ping
         emit("state");
+      }
+      else if (m.type === "pong") {
+        const t1 = Date.now(), rtt = t1 - m.clientTime;
+        if (rtt >= 0 && rtt < 5000) {
+          syncSamples.push({ rtt, offset: m.serverTime - (m.clientTime + t1) / 2 });
+          if (syncSamples.length > 16) syncSamples.shift();
+          const best = syncSamples.reduce((a, b) => (b.rtt < a.rtt ? b : a));
+          S.serverOffset = best.offset; S.clockRtt = best.rtt;
+        }
       }
       else if (m.type === "bible_results") emit("bibleResults", m);
       else if (m.type === "song_results") emit("songResults", m);
