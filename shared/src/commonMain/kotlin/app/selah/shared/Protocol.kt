@@ -202,6 +202,8 @@ sealed interface ServerMessage {
         val presentations: List<String> = emptyList(),
         /** Lo que este PC sabe hacer además de lo básico (p. ej. [FEATURE_CAROUSEL]); un PC viejo no manda nada. */
         val features: List<String> = emptyList(),
+        /** Avisar si una canción se cantó en estos últimos días (0 = no avisar / PC viejo). */
+        val repeatDays: Int = 0,
     ) : ServerMessage
 
     @Serializable @SerialName("state")
@@ -231,6 +233,10 @@ sealed interface ServerMessage {
         val plan: ServicePlanState,
         /** Listas guardadas, la más reciente primero. */
         val saved: List<String> = emptyList(),
+        /** El culto de hoy ("Dominical · domingo 9:00"), si hay uno configurado; "" = ninguno. */
+        val todayService: String = "",
+        /** La lista que le toca hoy según la rotación de ese culto, o null. */
+        val todayList: String? = null,
     ) : ServerMessage
 
     @Serializable @SerialName("error")

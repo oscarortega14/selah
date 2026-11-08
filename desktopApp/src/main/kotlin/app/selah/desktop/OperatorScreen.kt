@@ -307,11 +307,22 @@ private fun SongsTab(
 ) {
     var query by remember { mutableStateOf("") }
     var sermons by remember { mutableStateOf(false) }
+    val worship = LocalWorship.current
+    // Filtro por tipo (Alabanza, Adoración…) u "OLD" = las que llevan más tiempo sin cantarse primero.
+    var tagFilter by remember { mutableStateOf<String?>(null) }
+    var warning by remember { mutableStateOf<String?>(null) }
+    val byId = remember(worship) { worship?.songs.orEmpty().associateBy { it.id } }
     // Canciones: por título o por cualquier frase de la letra. Predicaciones: por título.
-    val results = remember(query, catalog, sermons) {
-        if (sermons) catalog.sermons.search(query).map { app.selah.shared.SongHit(it.id, it.title, it.firstLine) }
+    val results = remember(query, catalog, sermons, tagFilter, byId) {
+        val hits = if (sermons) catalog.sermons.search(query).map { app.selah.shared.SongHit(it.id, it.title, it.firstLine) }
         else if (query.isBlank()) catalog.songs.map { app.selah.shared.SongHit(it.id, it.title, it.firstLine) }
         else searchSongs(query)
+        val f = tagFilter
+        when {
+            sermons || f == null -> hits
+            f == OLD_FIRST -> hits.sortedBy { byId[it.id]?.lastSung ?: "" }
+            else -> hits.filter { h -> byId[h.id]?.tags.orEmpty().any { app.selah.shared.normalizeKey(it) == app.selah.shared.normalizeKey(f) } }
+        }
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -323,6 +334,18 @@ private fun SongsTab(
             label = { Text(if (sermons) "Buscar predicación" else "Buscar por título o letra") },
             singleLine = true, modifier = Modifier.fillMaxWidth().marksTyping(),
         )
+        if (!sermons && worship != null) {
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (t in worship.knownTags) FilterChip(tagFilter == t, { tagFilter = if (tagFilter == t) null else t }, { Text(t) }, Modifier.hand())
+                FilterChip(tagFilter == OLD_FIRST, { tagFilter = if (tagFilter == OLD_FIRST) null else OLD_FIRST }, { Text("Sin cantar hace tiempo") }, Modifier.hand())
+            }
+        }
+        warning?.let { w ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("⚠ $w", Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.tertiary)
+                TextButton({ warning = null }, contentPadding = PaddingValues(4.dp)) { Text("✕") }
+            }
+        }
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(results, key = { it.id }) { song ->
                 Row(
@@ -333,15 +356,21 @@ private fun SongsTab(
                 ) {
                     Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                         Text(song.title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        // "Cantada: hace 3 días" ayuda a no repetir
+                        // "Alabanza · Cantada: hace 3 días" ayuda a no repetir
+                        val tags = if (sermons) "" else byId[song.id]?.tags.orEmpty().joinToString(", ").let { if (it.isEmpty()) "" else "$it · " }
                         Text(
                             if (song.snippet.isNotEmpty()) "…${song.snippet}…"
-                            else (if (sermons) "" else lastSung[song.id]?.let { "Cantada: ${formatAgo(it)} · " }.orEmpty()) + song.firstLine, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                            else tags + (if (sermons) "" else lastSung[song.id]?.let { "Cantada: ${formatAgo(it)} · " }.orEmpty()) + song.firstLine, style = MaterialTheme.typography.bodySmall, maxLines = 1,
                             overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (!sermons && worship != null) byId[song.id]?.let { SongTagsButton(it, worship) }
                     TextButton(
-                        { send(if (sermons) ClientMessage.PlanAddSermon(song.id) else ClientMessage.PlanAddSong(song.id)) },
+                        {
+                            send(if (sermons) ClientMessage.PlanAddSermon(song.id) else ClientMessage.PlanAddSong(song.id))
+                            // Se agrega igual; solo se avisa si se cantó hace poco.
+                            warning = if (sermons) null else byId[song.id]?.let { worship?.repeatWarning(it) }
+                        },
                         contentPadding = PaddingValues(6.dp),
                     ) { Text("+ Lista") }
                     TextButton({ if (sermons) onEditSermon(song.id) else onEdit(song.id) }, contentPadding = PaddingValues(6.dp)) { Text("Editar") }
@@ -574,7 +603,12 @@ private fun PlanPanel(
 ) {
     var saving by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
+    val worship = LocalWorship.current
+    var preparing by remember { mutableStateOf<app.selah.shared.WorshipService?>(null) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // El culto de hoy: abrir la lista que le toca o prepararla desde la plantilla.
+        if (worship != null) TodayServiceBanner(worship, onOpenList = { send(ClientMessage.PlanOpen(it)) }, onPrepare = { preparing = it })
+        preparing?.let { svc -> if (worship != null) PrepareServiceDialog(svc, worship, send) { preparing = null } }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Orden del culto", style = MaterialTheme.typography.titleSmall)
@@ -921,3 +955,7 @@ private fun LowerThirdBox(state: PresentationState, send: (ClientMessage) -> Uni
         Text("En OBS: ${state.lowerThird}" + if (state.lowerThirdSub.isNotEmpty()) " · ${state.lowerThirdSub}" else "", color = MaterialTheme.colorScheme.primary)
     }
 }
+
+/** Filtro de canciones: las que llevan más tiempo sin cantarse, primero. */
+private const val OLD_FIRST = "\u0000antiguas"
+

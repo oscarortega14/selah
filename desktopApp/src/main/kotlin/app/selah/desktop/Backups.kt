@@ -84,6 +84,6 @@ class Backups(
         const val WEEK_MILLIS = 7L * 24 * 3600 * 1000
         const val PREFIX = "Selah-respaldo-"
         /** Lo que entra en el respaldo (relativo a la carpeta Selah). */
-        val INCLUDED = listOf("canciones", "predicaciones", "listas", "lista-del-culto.json", "historial.csv")
+        val INCLUDED = listOf("canciones", "predicaciones", "listas", "lista-del-culto.json", "historial.csv", "cultos.json")
     }
 }

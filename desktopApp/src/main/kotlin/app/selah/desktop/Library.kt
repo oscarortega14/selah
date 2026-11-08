@@ -155,6 +155,22 @@ class Library(val baseDir: File) {
         return save(id, lines.joinToString("\n"))
     }
 
+    /** Cambia la línea "Tipo:" de una canción (vacío = sin tipo). Devuelve su id (no cambia). */
+    fun setSongTags(id: String, tags: List<String>): String {
+        val text = rawText(id) ?: throw IllegalArgumentException("Canción no encontrada")
+        // Solo en el encabezado (antes de la primera estrofa): una línea de la letra que diga "Tipo:" no se toca.
+        val all = text.replace("\r\n", "\n").split('\n')
+        val firstLyric = all.indexOfFirst { l -> val t = l.trim(); t.isNotEmpty() && !t.startsWith("#") && HEADER_LINES.none { it.matches(t) } }
+            .let { if (it < 0) all.size else it }
+        val lines = all.filterIndexed { i, l -> i >= firstLyric || !TYPE_LINE.matches(l.trim()) }.toMutableList()
+        val clean = SongParser.parseTags(tags.joinToString(","))
+        if (clean.isNotEmpty()) {
+            val titleAt = lines.indexOfFirst { it.trimStart().startsWith("#") }
+            lines.add(titleAt + 1, "Tipo: " + clean.joinToString(", "))
+        }
+        return save(id, lines.joinToString("\n"))
+    }
+
     /**
      * Importa canciones: archivos .txt sueltos o dentro de .zip. Si ya existe una con el mismo
      * nombre y el mismo texto se omite; si el texto es distinto se guarda como "Nombre (2)".
@@ -469,6 +485,9 @@ class Library(val baseDir: File) {
         fun isMediaFile(name: String) = name.substringAfterLast('.', "").lowercase().let { it in IMAGE_EXTENSIONS || it in VIDEO_EXTENSIONS }
 
         val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "bmp")
+        private val TYPE_LINE = Regex("""^tipos?\s*:.*$""", RegexOption.IGNORE_CASE)
+        /** Líneas que van antes de la letra (no se proyectan). */
+        private val HEADER_LINES = listOf(TYPE_LINE, Regex("""^(orden|fondo|autor(es)?|ccli)\b.*$""", RegexOption.IGNORE_CASE))
         private val FONDO_LINE = Regex("""^fondo\s*:.*$""", RegexOption.IGNORE_CASE)
         private val FORBIDDEN = Regex("""[\\/:*?"<>|\u0000-\u001F]""")
 

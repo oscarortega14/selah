@@ -108,6 +108,7 @@ fun main() {
         var historyOpen by remember { mutableStateOf(false) }
         var backupsOpen by remember { mutableStateOf(false) }
         var biblesOpen by remember { mutableStateOf(false) }
+        var servicesOpen by remember { mutableStateOf(false) }
         // Respaldo semanal automático, un rato después de abrir.
         LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(30_000)
@@ -168,6 +169,20 @@ fun main() {
         ) {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 val presentationsReady by library.presentations.ready.collectAsState()
+                val servicesCfg by commands.services!!.config.collectAsState()
+                val worship = remember(servicesCfg, savedLists, catalog, lastSung) {
+                    Worship(
+                        config = servicesCfg,
+                        update = { f -> scope.launch(Dispatchers.IO) { commands.services?.update(f) } },
+                        savedLists = savedLists,
+                        songs = withLastSung(catalog.songs, lastSung),
+                        announcements = catalog.announcements,
+                        sermons = catalog.sermons,
+                        setTags = { id, tags -> runCatching { library.setSongTags(id, tags); null }.getOrElse { it.message ?: "No pude guardar el tipo" } },
+                        openServices = { servicesOpen = true },
+                    )
+                }
+                androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship) {
                 OperatorScreen(
                     state = state,
                     catalog = catalog,
@@ -214,6 +229,8 @@ fun main() {
                     },
                     presentationsReady = presentationsReady,
                 )
+                if (servicesOpen) ServicesWindow(worship, onClose = { servicesOpen = false })
+                }
                 // La primera vez: guía corta. Después del aviso del firewall, para no encimar ventanas.
                 if (!settings.welcomeDone && !askFirewall) {
                     WelcomeDialog(onDone = { settingsStore.update { it.copy(welcomeDone = true) } })
@@ -238,7 +255,7 @@ fun main() {
                     BackupsDialog(
                         backups, settings,
                         onChooseCopyDir = { d -> settingsStore.update { it.copy(backupCopyDir = d) } },
-                        onRestored = { library.reload(); commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk() },
+                        onRestored = { library.reload(); commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk(); commands.services?.reloadFromDisk() },
                         onClose = { backupsOpen = false },
                     )
                 }

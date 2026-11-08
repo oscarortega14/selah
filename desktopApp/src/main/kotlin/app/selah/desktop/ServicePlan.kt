@@ -62,6 +62,9 @@ class ServicePlan(
         else -> null
     }
 
+    /** Se abrió una lista guardada (para que avance la rotación de los cultos). */
+    var onOpened: ((String) -> Unit)? = null
+
     /** Guarda la lista actual en listas/<nombre>.json. Devuelve un mensaje de error o null. */
     @Synchronized
     fun saveAs(name: String): String? {
@@ -88,6 +91,7 @@ class ServicePlan(
             ?: return "No encontré la lista \"$name\""
         val loaded = load(File(listsDir, "$found.json")) ?: return "No encontré la lista \"$name\""
         update { loaded.copy(current = -1, name = found) }
+        onOpened?.invoke(found)
         return null
     }
 
@@ -192,8 +196,15 @@ fun suggestedListName(today: java.time.LocalDate = java.time.LocalDate.now()): S
 }
 
 /** Reparte cada orden: lo de la lista a [ServicePlan], el resto al [Presenter]. */
-class Commands(val presenter: Presenter, val plan: ServicePlan, val history: History? = null) {
+class Commands(
+    val presenter: Presenter,
+    val plan: ServicePlan,
+    val history: History? = null,
+    /** Cultos (día, plantilla, rotación); null en algunas pruebas. */
+    val services: ServicesStore? = null,
+) {
     init {
+        services?.let { s -> plan.onOpened = s::markUsed }
         presenter.renameListeners += { kind, oldId, newId, title ->
             plan.renamed(if (kind == HistoryEntry.Kind.SERMON) PlanKind.SERMON else PlanKind.SONG, oldId, newId, title)
             history?.renamed(kind, oldId, newId, title)
@@ -221,7 +232,8 @@ class Commands(val presenter: Presenter, val plan: ServicePlan, val history: His
             val plan = ServicePlan(File(library.baseDir, "lista-del-culto.json"), library, presenter::handle)
             val history = History(File(library.baseDir, "historial.csv"))
             presenter.onShown = history::record
-            return Commands(presenter, plan, history).apply {
+            val services = ServicesStore(File(library.baseDir, "cultos.json"))
+            return Commands(presenter, plan, history, services).apply {
                 onSelectBible = { library.selectBible(it) }
                 onSelectSecondBible = { library.selectSecondBible(it) }
             }

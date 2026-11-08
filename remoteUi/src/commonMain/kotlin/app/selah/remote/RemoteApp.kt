@@ -80,6 +80,8 @@ internal fun RemoteApp(
     val announcements by client.announcements.collectAsState()
     val presentations by client.presentations.collectAsState()
     val features by client.features.collectAsState()
+    val repeatDays by client.repeatDays.collectAsState()
+    val todayService by client.today.collectAsState()
     val sermons by client.sermons.collectAsState()
     val bibleNames by client.bibleNames.collectAsState()
     val secondBible by client.secondBible.collectAsState()
@@ -137,7 +139,7 @@ internal fun RemoteApp(
             Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
                 when (tab) {
                     0 -> LiveTab(state, client::send)
-                    1 -> SongsTab(songs, songResults, onSearch = { q -> client.send(ClientMessage.SongSearch(q)) }, onAdd = { id -> client.send(ClientMessage.PlanAddSong(id)) }) { id ->
+                    1 -> SongsTab(songs, songResults, repeatDays, onSearch = { q -> client.send(ClientMessage.SongSearch(q)) }, onAdd = { id -> client.send(ClientMessage.PlanAddSong(id)) }) { id ->
                         client.send(ClientMessage.SelectSong(id)); tab = 0
                     }
                     2 -> BibleTab(
@@ -156,7 +158,7 @@ internal fun RemoteApp(
                             tab = 0
                         },
                     )
-                    3 -> PlanTab(plan, savedLists, state.stageMessage, client::send) { tab = 0 }
+                    3 -> PlanTab(plan, savedLists, state.stageMessage, client::send, todayService) { tab = 0 }
                     4 -> MoreTab(
                         state, announcements, presentations, sermons, client.serverOffset, client::send,
                         onUpload = client::uploadAnnouncement,
@@ -298,12 +300,15 @@ private fun LiveTab(state: PresentationState, send: (ClientMessage) -> Unit) {
 private fun SongsTab(
     songs: List<SongSummary>,
     serverResults: ServerMessage.SongResults?,
+    repeatDays: Int,
     onSearch: (String) -> Unit,
     onAdd: (String) -> Unit,
     onSelect: (String) -> Unit,
 ) {
     val notices = LocalNotices.current
     var query by rememberSaveable { mutableStateOf("") }
+    val byId = remember(songs) { songs.associateBy { it.id } }
+    val today = remember { today() }
     // Al instante por título; un momento después el computador busca también en la letra.
     LaunchedEffect(query) {
         if (query.trim().length >= 2) { kotlinx.coroutines.delay(250); onSearch(query.trim()) }
@@ -315,9 +320,15 @@ private fun SongsTab(
     OutlinedTextField(query, { query = it }, label = { Text("Buscar por título o por la letra") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     LazyColumn(Modifier.padding(top = 8.dp)) {
         items(results, key = { it.id }) { song ->
+            val info = byId[song.id]
+            val days = app.selah.shared.daysSince(info?.lastSung, today)
+            val recent = app.selah.shared.recentlySung(info?.lastSung, today, repeatDays)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).clickable { onSelect(song.id) }.padding(vertical = 10.dp)) {
                     Text(song.title, fontWeight = FontWeight.Medium, fontSize = 18.sp)
+                    // "Alabanza · cantada hace 6 días" (resaltado si fue hace poco)
+                    val meta = listOfNotNull(info?.tags?.takeIf { it.isNotEmpty() }?.joinToString(", "), days?.let { "cantada " + app.selah.shared.agoText(it) }).joinToString(" · ")
+                    if (meta.isNotEmpty()) Text(meta, color = if (recent) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary, fontSize = 13.sp, maxLines = 1)
                     Text(
                         if (song.snippet.isNotEmpty()) "…${song.snippet}…" else song.firstLine,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -325,7 +336,8 @@ private fun SongsTab(
                 }
                 OutlinedButton({
                     onAdd(song.id)
-                    notices.show("Agregada a la lista")
+                    // Se agrega igual; si se cantó hace poco, se avisa.
+                    notices.show(if (recent && days != null) "Agregada. Ojo: se cantó ${app.selah.shared.agoText(days)}" else "Agregada a la lista", long = recent)
                 }) { Text("+", fontSize = 20.sp) }
             }
         }
@@ -347,13 +359,31 @@ private fun Controls(state: PresentationState, send: (ClientMessage) -> Unit) {
 }
 
 @Composable
-private fun PlanTab(plan: ServicePlanState, saved: List<String>, stageMessage: String, send: (ClientMessage) -> Unit, onPlayed: () -> Unit) {
+private fun PlanTab(
+    plan: ServicePlanState,
+    saved: List<String>,
+    stageMessage: String,
+    send: (ClientMessage) -> Unit,
+    todayService: Pair<String, String?> = "" to null,
+    onPlayed: () -> Unit,
+) {
     var msg by rememberSaveable { mutableStateOf("") }
     var saving by rememberSaveable { mutableStateOf(false) }
     var opening by rememberSaveable { mutableStateOf(false) }
     if (saving) SavePlanDialog(plan.name.ifEmpty { suggestedListName() }, { saving = false }) { name -> saving = false; send(ClientMessage.PlanSave(name)) }
     if (opening) OpenPlanDialog(saved, { opening = false }) { name -> opening = false; send(ClientMessage.PlanOpen(name)) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // El culto de hoy (configurado en el PC) y la lista que le toca en su rotación.
+        val (service, list) = todayService
+        if (service.isNotEmpty()) item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Hoy: $service", fontWeight = FontWeight.Medium)
+                    if (list != null && list != plan.name) Button({ send(ClientMessage.PlanOpen(list)) }, Modifier.fillMaxWidth()) { Text("Abrir «$list» (le toca hoy)") }
+                    else if (list != null) Text("La lista de hoy ya está abierta.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

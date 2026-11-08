@@ -124,6 +124,15 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Letra en los celulares de la congregación**: `http://IP:8765/letra` — solo lectura, letra grande (A−/A+,
   fondo claro u oscuro), solo lo que está en el videobeam (nunca los mensajes al escenario). En "Conectar
   dispositivos" está su código QR y un botón para ponerlo en Anuncios y proyectarlo.
+- **Cultos** (Lista → "Cultos…"): cada iglesia define los suyos (nombre, día y hora, p. ej. "Dominical · domingo 9:00").
+  Cada culto tiene una **plantilla** (p. ej. 3 de alabanza, 3 de adoración, lectura, anuncio, predicación): "Preparar
+  desde la plantilla" arma la lista proponiendo las canciones de cada tipo que llevan más tiempo sin cantarse. Y
+  **listas en rotación** (Dominical A, B, C…): Selah propone la que toca hoy (en el PC y en la app). Se guarda en
+  `Selah/cultos.json`.
+- **Tipo de canción**: línea `Tipo: Alabanza` (o varias: `Tipo: Adoración, Navidad`) debajo del título, o con el botón
+  "Tipo" en la lista de canciones. Filtros por tipo y "Sin cantar hace tiempo".
+- **Canciones repetidas**: al agregar una que se cantó hace poco (14 días por defecto, se cambia en "Cultos…") sale un
+  aviso; se agrega igual. La app del celular muestra "cantada hace 6 días" en cada canción.
 - **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
   (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
   desde la app y el control web.

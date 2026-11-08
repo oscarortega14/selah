@@ -105,6 +105,14 @@ class RemoteClient(private val scope: CoroutineScope) {
     private val _features = MutableStateFlow<List<String>>(emptyList())
     val features: StateFlow<List<String>> = _features.asStateFlow()
 
+    /** Avisar si una canción se cantó en estos días (0 = no avisar o PC viejo). */
+    private val _repeatDays = MutableStateFlow(0)
+    val repeatDays: StateFlow<Int> = _repeatDays.asStateFlow()
+
+    /** El culto de hoy y la lista que le toca ("" / null si no hay). */
+    private val _today = MutableStateFlow<Pair<String, String?>>("" to null)
+    val today: StateFlow<Pair<String, String?>> = _today.asStateFlow()
+
     /** Presentaciones (PowerPoint y PDF) del computador. */
     private val _presentations = MutableStateFlow<List<String>>(emptyList())
     val presentations: StateFlow<List<String>> = _presentations.asStateFlow()
@@ -185,7 +193,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _bibleChapter.value = null; _bibleResults.value = null; _songResults.value = null
         _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
         _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
-        _plan.value = ServicePlanState(); _savedLists.value = emptyList()
+        _plan.value = ServicePlanState(); _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
         _auth.value = null
         serverOffset = 0
     }
@@ -294,6 +302,7 @@ class RemoteClient(private val scope: CoroutineScope) {
                 _announcements.value = m.announcements
                 _presentations.value = m.presentations
                 _features.value = m.features
+                _repeatDays.value = m.repeatDays
                 _sermons.value = m.sermons
                 _bibleNames.value = m.bibleNames
                 _secondBible.value = m.secondBible
@@ -305,7 +314,7 @@ class RemoteClient(private val scope: CoroutineScope) {
             }
             is ServerMessage.BibleResults -> _bibleResults.value = m
             is ServerMessage.SongResults -> _songResults.value = m
-            is ServerMessage.Plan -> { _plan.value = m.plan; _savedLists.value = m.saved }
+            is ServerMessage.Plan -> { _plan.value = m.plan; _savedLists.value = m.saved; _today.value = m.todayService to m.todayList }
             is ServerMessage.Error -> _errors.tryEmit(m.message)
             is ServerMessage.Auth -> {
                 if (m.ok) {

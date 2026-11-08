@@ -116,6 +116,11 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   a un PC que lo entiende).
 - Letra para la congregación (`Congregation.kt`, `/letra` + canal de solo lectura `/ws-letra`, QR en
   "Conectar dispositivos" y botón para ponerlo en Anuncios).
+- Cultos (`shared/Services.kt`: `WorshipService`, `ServicesConfig`, `suggestSongs`; `ServicesStore.kt` en
+  `Selah/cultos.json`; `ServicesUi.kt`: ventana Cultos, "Preparar desde la plantilla", aviso del culto de hoy con
+  `LocalWorship`). Línea `Tipo:` en las canciones (`Song.tags`, `Library.setSongTags`, solo en el encabezado).
+  `SongSummary.lastSung` + `Library.repeatDays` y `Plan.todayService/todayList` para la app (campos con valor por
+  defecto: compatibles con apps y PCs viejos).
 - Mac: `packageDmg` (Apple Silicon). Falta: certificado "Developer ID Application" (solo lo crea el titular de la
   cuenta de Apple) + notarización, y armar también para Mac Intel si alguien lo necesita.
 

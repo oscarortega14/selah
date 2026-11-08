@@ -20,6 +20,8 @@ package app.selah.shared
  *   primera etiqueta. Los nombres que no existen se ignoran (y se reportan en unknownOrder).
  * - Opcional, también antes de la primera estrofa: "Fondo: montañas.jpg" usa esa imagen
  *   (de la carpeta Selah/fondos) solo para esta canción.
+ * - Opcional, antes de la primera estrofa: "Tipo: Alabanza" (o "Tipo: Adoración, Navidad"): para las plantillas
+ *   de los cultos y los filtros. No se proyecta.
  * - Opcional, antes de la primera estrofa: "Autor: …" y "CCLI: 1234567" (número de la canción en CCLI,
  *   para el reporte de licencias). No se proyectan.
  * - Acordes (formato ChordPro) justo antes de la sílaba: "[G]Cuán grande es [C]Él". En el videobeam
@@ -30,6 +32,7 @@ object SongParser {
     private const val MAX_LABEL = 30
     private val ORDER_LINE = Regex("""^orden\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val BACKGROUND_LINE = Regex("""^fondo\s*:(.*)$""", RegexOption.IGNORE_CASE)
+    private val TYPE_LINE = Regex("""^tipos?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val AUTHOR_LINE = Regex("""^autor(?:es)?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val CCLI_LINE = Regex("""^ccli\s*(?:#|n[ºo°.]*)?\s*:?\s*(\d{1,10})\s*$""", RegexOption.IGNORE_CASE)
     const val START_LABEL = "Inicio"
@@ -46,6 +49,7 @@ object SongParser {
         var background: String? = null
         var author: String? = null
         var ccli: String? = null
+        var tags: List<String>? = null
 
         for (raw in text.removePrefix("﻿").replace("\r\n", "\n").replace('\r', '\n').split('\n')) {
             val line = raw.trim()
@@ -68,6 +72,11 @@ object SongParser {
             val authorMatch = AUTHOR_LINE.matchEntire(line)
             if (authorMatch != null && author == null && beforeLyrics) {
                 author = authorMatch.groupValues[1].trim().ifEmpty { null }
+                continue
+            }
+            val typeMatch = TYPE_LINE.matchEntire(line)
+            if (typeMatch != null && tags == null && beforeLyrics) {
+                tags = parseTags(typeMatch.groupValues[1])
                 continue
             }
             val ccliMatch = CCLI_LINE.matchEntire(line)
@@ -93,8 +102,12 @@ object SongParser {
             withChords(label, lines)
         }
         val song = if (order.isNullOrEmpty()) Song(id, title, slides) else expand(id, title, slides, order)
-        return song.copy(background = background, author = author, ccli = ccli)
+        return song.copy(background = background, author = author, ccli = ccli, tags = tags.orEmpty())
     }
+
+    /** "Alabanza, adoración" → ["Alabanza", "adoración"] (sin repetir, ignorando mayúsculas y tildes). */
+    fun parseTags(text: String): List<String> =
+        text.split(',', ';').map { it.trim().take(30) }.filter { it.isNotEmpty() }.distinctBy { normalizeKey(it) }.take(10)
 
     /** Acorde entre corchetes: empieza con una nota (A–G), sin espacios. "[coro x2]" no es acorde. */
     val CHORD = Regex("""\[([A-G][^\]\s]{0,11})\]""")

@@ -19,6 +19,10 @@ data class SongSummary(
     val id: String,
     val title: String,
     val firstLine: String = "",
+    /** Línea "Tipo:" (Alabanza, Adoración…). Vacío = sin tipo: vale para cualquier espacio de la plantilla. */
+    val tags: List<String> = emptyList(),
+    /** Última vez que se proyectó ("2026-11-02"), según el historial del PC; null = nunca o PC viejo. */
+    val lastSung: String? = null,
 )
 
 private val VERSE_LABEL = Regex(""".*\d+:\d+$""")
@@ -141,8 +145,10 @@ data class Song(
     val author: String? = null,
     /** Línea "CCLI:": número de la canción en CCLI, para el reporte de licencias. */
     val ccli: String? = null,
+    /** Línea "Tipo:" (Alabanza, Adoración…). */
+    val tags: List<String> = emptyList(),
 ) {
-    fun summary() = SongSummary(id, title, slides.firstOrNull()?.text?.lineSequence()?.firstOrNull().orEmpty())
+    fun summary() = SongSummary(id, title, slides.firstOrNull()?.text?.lineSequence()?.firstOrNull().orEmpty(), tags)
 }
 
 /** 125 -> "02:05"; 3725 -> "1:02:05". */

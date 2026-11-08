@@ -52,6 +52,10 @@ class RemoteServer(
 ) {
     private val guard = PinGuard(pin)
     private val presenter get() = commands.presenter
+    private val historyEntries: kotlinx.coroutines.flow.Flow<Any?> = commands.history?.entries ?: kotlinx.coroutines.flow.flowOf(null)
+    private val servicesConfig: kotlinx.coroutines.flow.Flow<app.selah.shared.ServicesConfig> =
+        commands.services?.config ?: kotlinx.coroutines.flow.flowOf(app.selah.shared.ServicesConfig())
+
     /** Celulares de la congregación conectados ahora a la página de la letra. */
     private val viewers = java.util.concurrent.atomic.AtomicInteger(0)
     val congregationViewers: Int get() = viewers.get()
@@ -225,14 +229,21 @@ class RemoteServer(
                 val pushJob = launch {
                     launch { pin.collect { send(Frame.Text(auth().encode())) } }
                     launch {
-                        library.catalog.collect { c ->
-                            send(Frame.Text(ServerMessage.Library(c.songs, c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons, c.bibleNames, c.secondBibleName, c.presentations, features = SERVER_FEATURES).encode()))
-                        }
+                        // Con la fecha en que se cantó cada canción (historial) y el aviso de repetidas (cultos).
+                        kotlinx.coroutines.flow.combine(library.catalog, historyEntries, servicesConfig) { c, _, cfg ->
+                            val sung = commands.history?.lastSung().orEmpty()
+                            ServerMessage.Library(
+                                withLastSung(c.songs, sung), c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons,
+                                c.bibleNames, c.secondBibleName, c.presentations, features = SERVER_FEATURES, repeatDays = cfg.repeatDays,
+                            )
+                        }.distinctUntilChanged().collect { m -> send(Frame.Text(m.encode())) }
                     }
                     launch {
-                        kotlinx.coroutines.flow.combine(commands.plan.state, commands.plan.saved, knowsPresentations) { p, saved, knows ->
-                            ServerMessage.Plan(if (knows) p else p.forOldRemotes(), saved)
+                        kotlinx.coroutines.flow.combine(commands.plan.state, commands.plan.saved, knowsPresentations, servicesConfig) { p, saved, knows, cfg ->
+                            val (service, list) = todaySuggestion(cfg, saved, java.time.LocalDateTime.now())
+                            ServerMessage.Plan(if (knows) p else p.forOldRemotes(), saved, service, list)
                         }
+                            .distinctUntilChanged()
                             .collect { m -> send(Frame.Text(m.encode())) }
                     }
                     presenter.state.collect { s ->
