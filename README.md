@@ -124,7 +124,11 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Letras para transmisión (OBS)**: `http://IP:8765/obs.html` como "Fuente de navegador" (fondo transparente).
   Parámetros: `?pos=bottom|center|top&size=44&bg=1` (bg=1 agrega una franja oscura detrás del texto).
 
-Cualquiera conectado a la misma red puede controlar la proyección: úsalo en la red de la iglesia, no en una red pública.
+Para **controlar** la proyección hace falta la **clave de 4 números** que muestra el computador (en "Conectar
+dispositivos"; se puede cambiar o quitar). Sin la clave, un dispositivo en el Wi-Fi solo puede **mirar**: vista de
+escenario, letras para OBS y búsquedas. Tras varios intentos fallidos la dirección queda bloqueada un rato.
+Aun así, lo ideal es una red de la iglesia (o una aparte para el equipo de medios), no una red pública, y
+cambiar la clave si mucha gente la conoce.
 
 ## Antes se llamaba Proyecta
 
