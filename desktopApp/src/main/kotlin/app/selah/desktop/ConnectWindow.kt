@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,6 +86,10 @@ fun ConnectWindow(
     ndiOn: Set<NdiOutput.Kind> = emptySet(),
     ndiReceivers: Map<NdiOutput.Kind, Int> = emptyMap(),
     onNdi: (NdiOutput.Kind, Boolean) -> String? = { _, _ -> null },
+    /** Guarda en Anuncios la imagen con el código de la página de la letra; devuelve un mensaje. */
+    onQrToAnnouncements: (url: String) -> String = { "" },
+    /** Celulares de la congregación siguiendo la letra ahora. */
+    congregationViewers: () -> Int = { 0 },
 ) {
     var selected by remember { mutableStateOf(addresses.firstOrNull()) }
     val host = selected
@@ -150,7 +155,10 @@ fun ConnectWindow(
                         )
                     }
 
-                    // 5. OBS
+                    // 5. Letra para la congregación
+                    if (host != null) CongregationSection("http://$host:$port${Congregation.PATH}", onQrToAnnouncements, congregationViewers)
+
+                    // 6. OBS
                     Section("Transmisión en vivo (OBS)") {
                         Text("En OBS agrega una \"Fuente de navegador\" con esta dirección (fondo transparente, solo la letra):")
                         CopyableUrl("http://$host:$port/obs.html")
@@ -271,3 +279,35 @@ private fun CopyableUrl(url: String) {
         TextButton({ clipboard.setText(AnnotatedString(url)); copied = true }) { Text(if (copied) "✓ Copiado" else "Copiar") }
     }
 }
+
+/**
+ * Letra en los celulares de la congregación: página de solo lectura (no puede controlar nada) con lo que
+ * se ve en el videobeam. El código se puede proyectar como anuncio para que la gente lo escanee.
+ */
+@Composable
+private fun CongregationSection(url: String, onQrToAnnouncements: (String) -> String, viewers: () -> Int) {
+    var message by remember { mutableStateOf<String?>(null) }
+    var count by remember { mutableStateOf(viewers()) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(3000); count = viewers() } }
+    Section("Letra en los celulares de la congregación") {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+            Box(Modifier.background(Color.White).padding(8.dp)) { QrCode(url, 180.dp) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Para quien ve poco, se sentó lejos o llegó tarde: la letra grande en su celular. Solo puede mirar " +
+                        "(no cambia nada) y solo ve lo que está en el videobeam, no tus mensajes al escenario.",
+                )
+                CopyableUrl(url)
+                Button({ message = onQrToAnnouncements(url) }) { Text("Poner este código en Anuncios (para proyectarlo)") }
+                message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                if (count > 0) Text("Siguiendo la letra ahora: $count", color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "La congregación tiene que estar en el mismo Wi-Fi que este computador. Si les das una red de invitados, " +
+                        "revisa que desde ella se pueda abrir esta dirección.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+

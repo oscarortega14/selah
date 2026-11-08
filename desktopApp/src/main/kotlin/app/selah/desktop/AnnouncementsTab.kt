@@ -51,6 +51,8 @@ fun AnnouncementsTab(
     onAddPresentations: () -> Unit = {},
     onOpenPresentationsFolder: () -> Unit = {},
     presentationsReady: Int = 0,
+    /** Carrusel andando: segundos por imagen (0 = no). */
+    carouselSeconds: Int = 0,
 ) {
     var showPresentations by rememberSaveable { mutableStateOf(false) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -61,7 +63,7 @@ fun AnnouncementsTab(
         if (showPresentations) {
             PresentationsList(presentations, currentPresentation, Modifier.weight(1f), send, present, onAddPresentations, onOpenPresentationsFolder, presentationsReady)
         } else {
-            AnnouncementsList(announcements, current, Modifier.weight(1f), send, present, onAdd, onOpenFolder)
+            AnnouncementsList(announcements, current, Modifier.weight(1f), send, present, onAdd, onOpenFolder, carouselSeconds)
         }
     }
 }
@@ -75,9 +77,11 @@ private fun AnnouncementsList(
     present: (ClientMessage) -> Unit,
     onAdd: () -> Unit,
     onOpenFolder: () -> Unit,
+    carouselSeconds: Int,
 ) {
     val look = LocalLook.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        CarouselBar(announcements, carouselSeconds, present)
         if (announcements.isEmpty()) {
             Text(
                 "Agrega imágenes o videos (eventos, cumpleaños, la ofrenda…). Se muestran a pantalla completa; " +
@@ -177,3 +181,33 @@ private fun PresentationsList(
         }
     }
 }
+
+/**
+ * Carrusel: las imágenes de Anuncios pasan solas (antes del culto, en el receso). Con él andando,
+ * Siguiente/Anterior cambian de imagen; mostrar cualquier otra cosa lo detiene.
+ */
+@Composable
+private fun CarouselBar(announcements: List<String>, seconds: Int, present: (ClientMessage) -> Unit) {
+    val images = announcements.count { it.substringAfterLast('.', "").lowercase() in Library.IMAGE_EXTENSIONS }
+    if (seconds > 0) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(start = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Carrusel: una imagen cada $seconds s", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+            TextButton({ present(ClientMessage.StopCarousel) }, Modifier.hand()) { Text("Detener") }
+        }
+        return
+    }
+    if (images < 2) return
+    var chosen by remember { mutableStateOf(app.selah.shared.CAROUSEL_SECONDS_DEFAULT) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button({ present(ClientMessage.StartCarousel(chosen)) }, Modifier.hand(), contentPadding = PaddingValues(horizontal = 10.dp)) {
+            Text("▶ Carrusel ($images imágenes)")
+        }
+        for (s in listOf(5, 8, 15, 30)) {
+            FilterChip(chosen == s, { chosen = s }, { Text("$s s") }, Modifier.hand())
+        }
+    }
+}
+

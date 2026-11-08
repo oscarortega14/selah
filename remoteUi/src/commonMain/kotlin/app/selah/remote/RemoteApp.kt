@@ -79,6 +79,7 @@ internal fun RemoteApp(
     val songResults by client.songResults.collectAsState()
     val announcements by client.announcements.collectAsState()
     val presentations by client.presentations.collectAsState()
+    val features by client.features.collectAsState()
     val sermons by client.sermons.collectAsState()
     val bibleNames by client.bibleNames.collectAsState()
     val secondBible by client.secondBible.collectAsState()
@@ -156,7 +157,11 @@ internal fun RemoteApp(
                         },
                     )
                     3 -> PlanTab(plan, savedLists, state.stageMessage, client::send) { tab = 0 }
-                    4 -> MoreTab(state, announcements, presentations, sermons, client.serverOffset, client::send, onUpload = client::uploadAnnouncement) { tab = 0 }
+                    4 -> MoreTab(
+                        state, announcements, presentations, sermons, client.serverOffset, client::send,
+                        onUpload = client::uploadAnnouncement,
+                        carouselAvailable = app.selah.shared.FEATURE_CAROUSEL in features,
+                    ) { tab = 0 }
                 }
             }
             Controls(state, client::send)
@@ -420,6 +425,7 @@ private fun MoreTab(
     serverOffset: Long,
     send: (ClientMessage) -> Unit,
     onUpload: suspend (PickedFile) -> String,
+    carouselAvailable: Boolean = false,
     onShown: () -> Unit,
 ) {
     val notices = LocalNotices.current
@@ -483,6 +489,21 @@ private fun MoreTab(
             Text("Anuncios", style = MaterialTheme.typography.titleMedium)
             if (pick != null) OutlinedButton(pick, Modifier.fillMaxWidth().padding(top = 6.dp)) { Text("📷 Subir foto o video") }
             uploadMsg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            // Carrusel: solo si el PC lo entiende (uno viejo ignoraría la orden) y hay al menos 2 imágenes.
+            val images = announcements.count { it.substringAfterLast('.', "").lowercase() in setOf("jpg", "jpeg", "png", "webp", "bmp") }
+            if (carouselAvailable && state.carouselSeconds > 0) {
+                Button({ send(ClientMessage.StopCarousel) }, Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    Text("■ Detener el carrusel (cada ${state.carouselSeconds} s)")
+                }
+            } else if (carouselAvailable && images >= 2) {
+                var seconds by rememberSaveable { mutableIntStateOf(app.selah.shared.CAROUSEL_SECONDS_DEFAULT) }
+                OutlinedButton({ send(ClientMessage.StartCarousel(seconds)); onShown() }, Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    Text("▶ Pasar las $images imágenes solas")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (s in listOf(5, 8, 15, 30)) FilterChip(seconds == s, { seconds = s }, { Text("$s s") })
+                }
+            }
         }
         if (announcements.isNotEmpty()) {
             items(announcements, key = { "anuncio:$it" }) { name ->

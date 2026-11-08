@@ -2,6 +2,9 @@ package app.selah.remote
 
 import app.selah.shared.cleanListName
 import app.selah.shared.Bible
+import app.selah.shared.CAROUSEL_MAX_SECONDS
+import app.selah.shared.CAROUSEL_MIN_SECONDS
+import app.selah.shared.FEATURE_CAROUSEL
 import app.selah.shared.BibleReference
 import app.selah.shared.ClientMessage
 import app.selah.shared.PlanItem
@@ -53,6 +56,7 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             announcements = announcements,
             bibleNames = listOf(bible.name),
             presentations = presentations,
+            features = listOf(FEATURE_CAROUSEL),
         ),
         planMessage(),
         stateMessage(),
@@ -65,8 +69,12 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
         val error: String? = when (msg) {
             is ClientMessage.SelectSong -> selectSong(msg.id)
             is ClientMessage.GoTo -> { if (msg.index in state.slides.indices) state = state.copy(index = msg.index); null }
-            ClientMessage.Next -> { state = state.copy(index = (state.index + 1).coerceAtMost(state.slides.lastIndex)); null }
-            ClientMessage.Prev -> { state = state.copy(index = (state.index - 1).coerceAtLeast(if (state.slides.isEmpty()) -1 else 0)); null }
+            ClientMessage.Next -> if (state.carouselSeconds > 0) carouselStep(+1) else { state = state.copy(index = (state.index + 1).coerceAtMost(state.slides.lastIndex)); null }
+            ClientMessage.Prev -> if (state.carouselSeconds > 0) carouselStep(-1) else { state = state.copy(index = (state.index - 1).coerceAtLeast(if (state.slides.isEmpty()) -1 else 0)); null }
+            is ClientMessage.StartCarousel ->
+                if (msg.seconds !in CAROUSEL_MIN_SECONDS..CAROUSEL_MAX_SECONDS) "Cada imagen debe durar de $CAROUSEL_MIN_SECONDS a $CAROUSEL_MAX_SECONDS segundos"
+                else { carouselIndex = -1; state = state.copy(carouselSeconds = msg.seconds); carouselStep(+1) }
+            ClientMessage.StopCarousel -> { state = state.copy(carouselSeconds = 0); null }
             is ClientMessage.SetBlank -> { state = state.copy(blank = msg.blank); null }
             is ClientMessage.ShowBible -> showBible(msg.reference)
             is ClientMessage.ShowMedia -> showMedia(msg.name)
@@ -124,6 +132,26 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             if (plan != beforePlan) add(planMessage())
             if (state != before) add(stateMessage())
         }
+    }
+
+    // Carrusel (igual que en el PC): las imágenes pasan solas; Siguiente/Anterior cambian de imagen.
+    private var carouselIndex = -1
+    private var carouselNextAt = 0L
+
+    private fun carouselStep(step: Int): String? {
+        val seconds = state.carouselSeconds
+        carouselIndex = (carouselIndex + step).mod(announcements.size)
+        showMedia(announcements[carouselIndex])
+        state = state.copy(carouselSeconds = seconds)
+        carouselNextAt = clock() + seconds * 1000L
+        return null
+    }
+
+    /** El reloj de la demostración (la app lo llama cada medio segundo): cambia la imagen del carrusel cuando toca. */
+    fun tick(): List<ServerMessage> {
+        if (state.carouselSeconds <= 0 || clock() < carouselNextAt) return emptyList()
+        carouselStep(+1)
+        return listOf(stateMessage())
     }
 
     private fun stateMessage() = ServerMessage.State(state, serverNow = clock())

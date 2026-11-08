@@ -130,6 +130,16 @@ sealed interface ClientMessage {
     @Serializable @SerialName("plan_add_presentation")
     data class PlanAddPresentation(val name: String) : ClientMessage
 
+    /**
+     * Carrusel: las imágenes de Anuncios pasan solas cada [seconds] segundos (por ejemplo antes del culto).
+     * [names] vacío = todas las imágenes. Solo para un PC que dice [FEATURE_CAROUSEL] en Library.features.
+     */
+    @Serializable @SerialName("carousel_start")
+    data class StartCarousel(val seconds: Int, val names: List<String> = emptyList()) : ClientMessage
+
+    @Serializable @SerialName("carousel_stop")
+    data object StopCarousel : ClientMessage
+
     /** Proyectar una predicación (archivo de la carpeta predicaciones). */
     @Serializable @SerialName("sermon")
     data class ShowSermon(val id: String) : ClientMessage
@@ -190,6 +200,8 @@ sealed interface ServerMessage {
         val secondBible: String? = null,
         /** Presentaciones (PowerPoint y PDF) que se pueden mostrar. */
         val presentations: List<String> = emptyList(),
+        /** Lo que este PC sabe hacer además de lo básico (p. ej. [FEATURE_CAROUSEL]); un PC viejo no manda nada. */
+        val features: List<String> = emptyList(),
     ) : ServerMessage
 
     @Serializable @SerialName("state")
@@ -234,6 +246,14 @@ sealed interface ServerMessage {
 
 /** Capacidad de Hello: entiende State.keepSlides. */
 const val FEATURE_KEEP_SLIDES = "keepSlides"
+
+/** Capacidad del PC (Library.features): entiende StartCarousel/StopCarousel. */
+const val FEATURE_CAROUSEL = "carousel"
+
+/** Segundos por imagen que se proponen al iniciar un carrusel. Se aceptan de [CAROUSEL_MIN_SECONDS] a [CAROUSEL_MAX_SECONDS]. */
+const val CAROUSEL_SECONDS_DEFAULT = 8
+const val CAROUSEL_MIN_SECONDS = 3
+const val CAROUSEL_MAX_SECONDS = 600
 
 /** Capacidad de Hello: entiende PlanKind.PRESENTATION (las apps anteriores fallarían con un valor nuevo). */
 const val FEATURE_PRESENTATIONS = "presentations"

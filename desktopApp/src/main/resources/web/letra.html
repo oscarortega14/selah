@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141218">
+<title>Letra · Selah</title>
+<!--
+  Letra en el celular de la congregación (solo lectura): la diapositiva que está en el videobeam,
+  grande y legible. Para quien ve poco, se sentó lejos o llegó tarde. No puede controlar nada.
+-->
+<style>
+  :root { --bg:#141218; --fg:#f3edf7; --muted:#a59fb0; --accent:#d0bcff; --bar:#211f26; }
+  :root.claro { --bg:#fffbfe; --fg:#1c1b1f; --muted:#625b71; --accent:#6750a4; --bar:#f3edf7; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+               font-family:system-ui, -apple-system, Roboto, "Segoe UI", sans-serif; }
+  body { display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:8px; padding:10px 14px; padding-top:max(10px, env(safe-area-inset-top));
+           background:var(--bar); }
+  #title { flex:1; font-size:15px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  button { font:inherit; font-size:18px; min-width:48px; min-height:44px; border-radius:22px; border:1px solid var(--muted);
+           background:transparent; color:var(--fg); }
+  main { flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px 18px; overflow:auto; }
+  #text { white-space:pre-line; font-weight:600; line-height:1.35; text-align:center; margin:0; overflow-wrap:anywhere; }
+  #text2 { white-space:pre-line; color:var(--muted); line-height:1.35; text-align:center; margin:.8em 0 0; }
+  #ref { color:var(--accent); text-align:center; margin:.6em 0 0; font-weight:600; }
+  #idle { color:var(--muted); text-align:center; font-size:20px; line-height:1.5; }
+  #count { text-align:center; }
+  #count b { display:block; font-size:64px; color:var(--accent); font-variant-numeric:tabular-nums; }
+  #alert { background:#b3261e; color:#fff; padding:10px 14px; font-size:18px; text-align:center; }
+  footer { padding:6px 14px; padding-bottom:max(6px, env(safe-area-inset-bottom)); font-size:13px; color:var(--muted); text-align:center; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div id="title">Selah</div>
+  <button id="smaller" aria-label="Letra más pequeña">A−</button>
+  <button id="bigger" aria-label="Letra más grande">A+</button>
+  <button id="theme" aria-label="Cambiar entre fondo oscuro y claro">◐</button>
+</header>
+<div id="alert" hidden></div>
+<main>
+  <div id="count" hidden><span id="countText"></span><b id="countClock"></b></div>
+  <p id="text"></p>
+  <p id="text2" hidden></p>
+  <p id="ref" hidden></p>
+  <p id="idle">La letra aparecerá aquí cuando empiece la canción o la lectura.</p>
+</main>
+<footer id="status">Conectando…</footer>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+// Tamaño de letra: base según el ancho de la pantalla, por la escala que elija cada persona.
+let scale = parseFloat(store.get("letraEscala")) || 1;
+if (store.get("letraTema") === "claro") document.documentElement.classList.add("claro");
+let view = { visible: false }, offset = 0;
+
+function fit() {
+  const base = Math.min(Math.max(window.innerWidth / 13, 22), 48);
+  const len = (view.text || "").length;
+  // Estrofas largas un poco más chicas para que quepan sin desplazarse
+  const shrink = len > 260 ? 0.72 : len > 160 ? 0.85 : 1;
+  const px = Math.round(base * scale * shrink);
+  $("text").style.fontSize = px + "px";
+  $("text2").style.fontSize = Math.round(px * 0.75) + "px";
+  $("ref").style.fontSize = Math.round(px * 0.6) + "px";
+}
+
+function render() {
+  const v = view;
+  $("title").textContent = v.title || "Selah";
+  $("alert").hidden = !v.alert; $("alert").textContent = v.alert || "";
+  $("text").textContent = v.visible ? v.text : "";
+  $("text2").hidden = !(v.visible && v.text2); $("text2").textContent = v.text2 || "";
+  $("ref").hidden = !(v.visible && v.ref); $("ref").textContent = v.ref || "";
+  renderCount();
+  $("idle").hidden = v.visible || !$("count").hidden;
+  fit();
+}
+
+function renderCount() {
+  const left = v2left();
+  $("count").hidden = !(left > 0) || view.visible;
+  if (left > 0) {
+    const m = Math.floor(left / 60), s = left % 60;
+    $("countText").textContent = view.countdownText || "";
+    $("countClock").textContent = String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+  }
+}
+function v2left() {
+  if (view.countdownEnd == null) return 0;
+  return Math.max(0, Math.ceil((view.countdownEnd - (Date.now() + offset)) / 1000));
+}
+
+function connect() {
+  const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws-letra");
+  ws.onopen = () => { $("status").textContent = "En vivo"; };
+  ws.onmessage = (e) => {
+    try { view = JSON.parse(e.data); } catch (err) { return; }
+    if (view.serverNow) offset = view.serverNow - Date.now();
+    render();
+  };
+  ws.onclose = () => { $("status").textContent = "Sin conexión con el computador. Reintentando… (¿estás en el Wi-Fi de la iglesia?)"; setTimeout(connect, 3000); };
+  ws.onerror = () => ws.close();
+}
+
+$("bigger").onclick = () => { scale = Math.min(scale + 0.15, 2.5); store.set("letraEscala", scale); fit(); };
+$("smaller").onclick = () => { scale = Math.max(scale - 0.15, 0.6); store.set("letraEscala", scale); fit(); };
+$("theme").onclick = () => {
+  const claro = document.documentElement.classList.toggle("claro");
+  store.set("letraTema", claro ? "claro" : "oscuro");
+};
+window.addEventListener("resize", fit);
+setInterval(() => { if (view.countdownEnd != null) { renderCount(); $("idle").hidden = view.visible || !$("count").hidden; } }, 1000);
+// Que la pantalla no se apague mientras se sigue la letra (si el navegador lo permite).
+async function keepAwake() { try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+keepAwake();
+render();
+connect();
+</script>
+</body>
+</html>

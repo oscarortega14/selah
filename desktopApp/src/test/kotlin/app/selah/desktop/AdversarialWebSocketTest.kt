@@ -204,9 +204,10 @@ class AdversarialWebSocketTest {
                 ws.sync() // también le da tiempo al limitador
                 Thread.sleep(150)
             }
+            // (StartTimer(0) sí vale: 0 = sin límite de tiempo. Aquí solo van valores que se deben rechazar.)
             for (n in listOf(Int.MIN_VALUE, -1, 0, 24 * 3600 + 1, Int.MAX_VALUE)) {
                 ws.sendText(ClientMessage.StartCountdown(n).encode())
-                ws.sendText(ClientMessage.StartTimer(n).encode())
+                if (n != 0) ws.sendText(ClientMessage.StartTimer(n).encode())
                 ws.sendText(ClientMessage.BibleChapter("Juan", n).encode())
             }
             ws.sendText(ClientMessage.BibleChapter("x".repeat(60_000), 1).encode())

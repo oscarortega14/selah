@@ -16,6 +16,8 @@ object NetGuard {
 
     /** Textos que llegan de un remoto: avisos, mensajes, búsquedas… */
     const val MAX_TEXT = 300
+    /** Tope de nombres en una orden con lista (el carrusel). */
+    const val MAX_LIST = 200
 
     private val open = ConcurrentHashMap<String, AtomicInteger>()
 
@@ -61,6 +63,7 @@ object NetGuard {
         is ClientMessage.PlanAddBible -> msg.copy(reference = msg.reference.take(MAX_TEXT))
         is ClientMessage.ShowPresentation -> msg.copy(name = msg.name.take(MAX_TEXT))
         is ClientMessage.PlanAddPresentation -> msg.copy(name = msg.name.take(MAX_TEXT))
+        is ClientMessage.StartCarousel -> msg.copy(names = msg.names.take(MAX_LIST).map { it.take(MAX_TEXT) })
         else -> msg
     }
 

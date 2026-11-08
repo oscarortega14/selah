@@ -169,6 +169,12 @@
       <hr>
       <h2>Anuncios</h2>
       <div id="annList"></div>
+      <div class="row" id="carouselBox" style="margin:8px 0; gap:8px; align-items:center">
+        <button class="btn outline" id="carouselBtn" style="flex:1">▶ Pasar las imágenes solas</button>
+        <select id="carouselSec" aria-label="Segundos por imagen">
+          <option value="5">5 s</option><option value="8" selected>8 s</option><option value="10">10 s</option><option value="15">15 s</option><option value="30">30 s</option>
+        </select>
+      </div>
       <input id="annFile" type="file" accept="image/*,video/*" hidden>
       <button class="btn outline wide" id="annUpload">📷 Subir foto o video</button>
       <p class="muted" id="annProgress"></p>
@@ -344,6 +350,12 @@ $("annFile").onchange = () => {
 
 function renderAnnouncements() {
   const list = S.announcements || [];
+  // Carrusel: solo si hay imágenes (los videos no entran)
+  const images = list.filter((n) => /\.(jpe?g|png|webp|bmp)$/i.test(n));
+  const running = (S.state.carouselSeconds || 0) > 0;
+  $("carouselBox").hidden = images.length < 2 && !running;
+  $("carouselBtn").textContent = running ? "■ Detener el carrusel (cada " + S.state.carouselSeconds + " s)" : "▶ Pasar las imágenes solas";
+  $("carouselSec").hidden = running;
   const box = $("annList"); box.replaceChildren();
   list.forEach((name) => {
     const row = P.el("div", "item" + (name === S.state.media ? " on" : ""));
@@ -558,6 +570,10 @@ $("alertText").onkeydown = (e) => { if (e.key === "Enter") sendAlert(); };
 $("clearAlert").onclick = () => { $("alertText").value = ""; P.send("alert", { text: "" }); };
 $("cdStart").onclick = () => { const m = parseInt($("cdMin").value, 10); if (m > 0) P.send("countdown_start", { seconds: m * 60, text: $("cdText").value }); };
 $("cdStop").onclick = () => P.send("countdown_stop");
+$("carouselBtn").onclick = () => {
+  if ((S.state.carouselSeconds || 0) > 0) P.send("carousel_stop");
+  else { P.send("carousel_start", { seconds: parseInt($("carouselSec").value, 10) }); showTab("live"); }
+};
 $("tmStart").onclick = () => P.send("timer_start", { minutes: parseInt($("tmMin").value, 10) || 0 });
 $("tmStop").onclick = () => P.send("timer_stop");
 $("ltShow").onclick = () => { if ($("ltTitle").value.trim()) P.send("lower_third", { title: $("ltTitle").value, subtitle: $("ltSub").value }); };

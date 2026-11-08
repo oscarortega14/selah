@@ -151,6 +151,7 @@ fun OperatorScreen(
                     onImport = { onImport()?.let { message = it } }, onExport = { onExport()?.let { message = it } },
                     onOpenBibles = onOpenBibles,
                     currentMedia = state.media,
+                    carouselSeconds = state.carouselSeconds,
                     onAddAnnouncements = { onAddAnnouncements()?.let { message = it } },
                     onOpenAnnouncements = onOpenAnnouncements,
                     currentPresentation = state.presentation,
@@ -247,6 +248,7 @@ private fun LeftPanel(
     onExport: () -> Unit,
     onOpenBibles: () -> Unit,
     currentMedia: String?,
+    carouselSeconds: Int = 0,
     onAddAnnouncements: () -> Unit,
     onOpenAnnouncements: () -> Unit,
     currentPresentation: String?,
@@ -281,6 +283,7 @@ private fun LeftPanel(
             2 -> AnnouncementsTab(
                 catalog.announcements, currentMedia, Modifier.weight(1f), send, present, onAddAnnouncements, onOpenAnnouncements,
                 catalog.presentations, currentPresentation, onAddPresentations, onOpenPresentations, presentationsReady,
+                carouselSeconds = carouselSeconds,
             )
             else -> PlanPanel(plan, savedLists, onDeleteSavedList, Modifier.weight(1f).fillMaxWidth(), send)
         }

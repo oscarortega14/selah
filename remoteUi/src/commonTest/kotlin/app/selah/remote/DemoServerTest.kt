@@ -88,4 +88,22 @@ class DemoServerTest {
         assertEquals("Diapositiva 1 de ${DemoServer.PRESENTATION_PAGES}", p.slides.first().text)
         assertEquals(61_000L, state(demo.handle(ClientMessage.StartCountdown(60, "Comenzamos en"))).countdownEnd)
     }
+
+    @Test
+    fun carouselInTheDemo() {
+        var now = 0L
+        val d = DemoServer(clock = { now })
+        assertTrue(app.selah.shared.FEATURE_CAROUSEL in d.welcome().filterIsInstance<ServerMessage.Library>().single().features)
+        val first = d.handle(ClientMessage.StartCarousel(5)).filterIsInstance<ServerMessage.State>().single().state
+        assertEquals(5, first.carouselSeconds)
+        assertEquals("Bienvenidos.jpg", first.media)
+        assertEquals(emptyList(), d.tick())
+        now += 5_000
+        assertEquals("Retiro de jóvenes.jpg", d.tick().filterIsInstance<ServerMessage.State>().single().state.media)
+        assertEquals("Bienvenidos.jpg", d.handle(ClientMessage.Next).filterIsInstance<ServerMessage.State>().single().state.media)
+        val stopped = d.handle(ClientMessage.SelectSong("demo-1")).filterIsInstance<ServerMessage.State>().single().state
+        assertEquals(0, stopped.carouselSeconds)
+        now += 60_000
+        assertEquals(emptyList(), d.tick())
+    }
 }

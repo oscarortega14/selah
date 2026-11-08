@@ -1,5 +1,8 @@
 package app.selah.desktop
 
+import io.ktor.server.response.respondRedirect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import app.selah.shared.cleanListName
 import app.selah.shared.forOldRemotes
 
@@ -49,6 +52,9 @@ class RemoteServer(
 ) {
     private val guard = PinGuard(pin)
     private val presenter get() = commands.presenter
+    /** Celulares de la congregación conectados ahora a la página de la letra. */
+    private val viewers = java.util.concurrent.atomic.AtomicInteger(0)
+    val congregationViewers: Int get() = viewers.get()
     private val pcName: String = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrDefault("Selah")
     private var engine: EmbeddedServer<*, *>? = null
 
@@ -159,6 +165,36 @@ class RemoteServer(
             }
             // Páginas web: control remoto (/), vista de escenario y letras para OBS.
             staticResources("/", "web", index = "index.html")
+            // Letra para la congregación: dirección corta para el código QR.
+            get(Congregation.PATH) { call.respondRedirect("${Congregation.PATH}.html") }
+            // Canal solo de lectura para esa página: recibe lo que se ve en el videobeam y nada más
+            // (ni mensajes al escenario, ni tiempos, ni la biblioteca). Lo que mande el celular se ignora.
+            webSocket(Congregation.WS_PATH) {
+                val address = call.request.local.remoteAddress
+                if (!NetGuard.trusted(call.request.headers["Host"], call.request.headers["Origin"], pcName)) {
+                    close(io.ktor.websocket.CloseReason(io.ktor.websocket.CloseReason.Codes.VIOLATED_POLICY, "Origen no permitido"))
+                    return@webSocket
+                }
+                if (viewers.incrementAndGet() > Congregation.MAX_VIEWERS || !NetGuard.acquire(address)) {
+                    viewers.decrementAndGet()
+                    close(io.ktor.websocket.CloseReason(io.ktor.websocket.CloseReason.Codes.TRY_AGAIN_LATER, "Demasiadas conexiones"))
+                    return@webSocket
+                }
+                try {
+                    val push = launch {
+                        presenter.state
+                            .map { Congregation.view(it, 0) }.distinctUntilChanged()
+                            .collect { v ->
+                                val withTime = kotlinx.serialization.json.JsonObject(v + ("serverNow" to kotlinx.serialization.json.JsonPrimitive(System.currentTimeMillis())))
+                                send(Frame.Text(withTime.toString()))
+                            }
+                    }
+                    try { for (frame in incoming) { /* solo lectura */ } } finally { push.cancel() }
+                } finally {
+                    viewers.decrementAndGet()
+                    NetGuard.release(address)
+                }
+            }
 
             webSocket(WS_PATH) {
                 val address = call.request.local.remoteAddress
@@ -187,7 +223,7 @@ class RemoteServer(
                     launch { pin.collect { send(Frame.Text(auth().encode())) } }
                     launch {
                         library.catalog.collect { c ->
-                            send(Frame.Text(ServerMessage.Library(c.songs, c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons, c.bibleNames, c.secondBibleName, c.presentations).encode()))
+                            send(Frame.Text(ServerMessage.Library(c.songs, c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons, c.bibleNames, c.secondBibleName, c.presentations, features = SERVER_FEATURES).encode()))
                         }
                     }
                     launch {
@@ -256,6 +292,9 @@ class RemoteServer(
     companion object {
         /** Tope de lo que se puede subir desde un celular (un video corto). */
         const val MAX_UPLOAD = 300_000_000L
+
+        /** Lo que este PC sabe hacer además de lo básico: las apps solo ofrecen eso si aparece aquí. */
+        val SERVER_FEATURES = listOf(app.selah.shared.FEATURE_CAROUSEL)
         private val uploadSlots = kotlinx.coroutines.sync.Semaphore(3)
 
         /** Tope de toda la carpeta de anuncios al subir desde la red (para que nadie llene el disco). */

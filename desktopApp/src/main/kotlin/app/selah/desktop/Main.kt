@@ -86,6 +86,13 @@ fun main() {
             }
         }
         val projectorScreen = chooseProjectorScreen(screens, settings.projectorScreen)
+        // Reloj del carrusel de anuncios: cambia la imagen cuando toca.
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(250)
+                presenter.tick()
+            }
+        }
         // Anuncios copiados a mano a la carpeta: aparecen solos.
         LaunchedEffect(Unit) {
             while (true) {
@@ -284,6 +291,11 @@ fun main() {
                 onNewPin = { digits -> settingsStore.update { it.copy(pin = Settings.randomPin(digits), pinOff = false) } },
                 onPinOff = { off -> settingsStore.update { it.copy(pinOff = off) } },
                 onClose = { connectOpen = false },
+                onQrToAnnouncements = { url ->
+                    runCatching { Congregation.saveQrAnnouncement(library, url) }
+                        .fold({ "Listo: está en Anuncios como «${it.substringBeforeLast('.')}». También entra en el carrusel." }, { "No pude crear la imagen: ${it.message}" })
+                },
+                congregationViewers = { server.congregationViewers },
                 ndiOn = ndiOn,
                 ndiReceivers = ndiReceivers,
                 onNdi = { kind, want ->

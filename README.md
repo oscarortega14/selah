@@ -121,6 +121,12 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Control remoto web**: `http://IP:8765` en cualquier celular o tablet (Android o iPhone), sin instalar nada.
 - **Vista de escenario**: `http://IP:8765/escenario.html` — estrofa actual grande, la siguiente, la hora y
   mensajes del operador ("Repetir coro") que no salen en el videobeam.
+- **Letra en los celulares de la congregación**: `http://IP:8765/letra` — solo lectura, letra grande (A−/A+,
+  fondo claro u oscuro), solo lo que está en el videobeam (nunca los mensajes al escenario). En "Conectar
+  dispositivos" está su código QR y un botón para ponerlo en Anuncios y proyectarlo.
+- **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
+  (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
+  desde la app y el control web.
 - **Letras para transmisión (OBS)**: `http://IP:8765/obs.html` como "Fuente de navegador" (fondo transparente).
   Parámetros: `?pos=bottom|center|top&size=44&bg=1` (bg=1 agrega una franja oscura detrás del texto).
 

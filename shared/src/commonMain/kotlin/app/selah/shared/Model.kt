@@ -62,6 +62,8 @@ data class PresentationState(
     val lowerThird: String = "",
     /** Segunda línea del nombre, ej. "Predicación" o "Alabanza". */
     val lowerThirdSub: String = "",
+    /** Carrusel de anuncios andando: cada cuántos segundos cambia la imagen (0 = no hay carrusel). */
+    val carouselSeconds: Int = 0,
 ) {
     /** Segundos que lleva el predicador, o null si el temporizador no está andando. */
     fun timerElapsed(now: Long): Long? = timerStart?.let { ((now - it) / 1000).coerceAtLeast(0) }

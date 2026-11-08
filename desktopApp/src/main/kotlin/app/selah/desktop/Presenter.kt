@@ -1,6 +1,8 @@
 package app.selah.desktop
 
 import app.selah.shared.ClientMessage
+import app.selah.shared.CAROUSEL_MAX_SECONDS
+import app.selah.shared.CAROUSEL_MIN_SECONDS
 import app.selah.shared.PresentationState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -33,13 +35,17 @@ class Presenter(
     val state: StateFlow<PresentationState> = _state.asStateFlow()
 
     /** Aplica una orden. Devuelve un mensaje de error para mostrar, o null si salió bien. */
+    @Synchronized
     fun handle(msg: ClientMessage): String? = handleInner(msg).also { err -> if (err != null) Log.warn("Orden ${msg::class.simpleName}: $err") }
 
     private fun handleInner(msg: ClientMessage): String? = when (msg) {
         is ClientMessage.SelectSong -> selectSong(msg.id)
         is ClientMessage.GoTo -> { _state.update { s -> if (msg.index in s.slides.indices) s.copy(index = msg.index) else s }; null }
-        ClientMessage.Next -> { _state.update { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
-        ClientMessage.Prev -> { _state.update { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
+        // Con el carrusel andando, Siguiente/Anterior pasan de imagen (y el tiempo vuelve a empezar).
+        ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { _state.update { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
+        ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { _state.update { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
+        is ClientMessage.StartCarousel -> startCarousel(msg.seconds, msg.names)
+        ClientMessage.StopCarousel -> { _state.update { it.copy(carouselSeconds = 0) }; null }
         is ClientMessage.SetBlank -> { _state.update { it.copy(blank = msg.blank) }; null }
         is ClientMessage.ShowBible -> showBible(msg.reference)
         is ClientMessage.ShowMedia -> showMedia(msg.name)
@@ -146,6 +152,51 @@ class Presenter(
         _state.update { it.keepingOverlays(PresentationState(name.substringBeforeLast('.'), slides, 0, presentation = name)) }
         return null
     }
+
+    // --- Carrusel de anuncios: las imágenes pasan solas (antes del culto, en el receso…) ---
+    private var carouselImages: List<String> = emptyList()
+    private var carouselIndex = 0
+    private var carouselNextAt = 0L
+
+    private fun startCarousel(seconds: Int, names: List<String>): String? {
+        if (seconds !in CAROUSEL_MIN_SECONDS..CAROUSEL_MAX_SECONDS) return "Cada imagen debe durar de $CAROUSEL_MIN_SECONDS a $CAROUSEL_MAX_SECONDS segundos"
+        // Solo imágenes (un video tiene su propia duración); las que pidieron, o todas las de Anuncios.
+        val wanted = names.ifEmpty { library.catalog.value.announcements }
+        val images = wanted.distinct().filter { isImage(it) && library.announcementFile(it) != null }
+        if (images.isEmpty()) return "No hay imágenes en Anuncios para el carrusel"
+        carouselImages = images
+        carouselIndex = 0
+        showCarouselImage(seconds)
+        return null
+    }
+
+    private fun carouselStep(step: Int): String? {
+        val seconds = _state.value.carouselSeconds
+        // Si borraron imágenes de la carpeta mientras andaba, se saltan.
+        carouselImages = carouselImages.filter { library.announcementFile(it) != null }
+        if (carouselImages.isEmpty()) { _state.update { it.copy(carouselSeconds = 0) }; return "Ya no hay imágenes en Anuncios" }
+        carouselIndex = Math.floorMod(carouselIndex + step, carouselImages.size)
+        showCarouselImage(seconds)
+        return null
+    }
+
+    private fun showCarouselImage(seconds: Int) {
+        val name = carouselImages[carouselIndex]
+        _state.update {
+            it.keepingOverlays(
+                PresentationState("Anuncio: ${name.substringBeforeLast('.')}", listOf(app.selah.shared.Slide("Anuncio", name)), 0, media = name),
+            ).copy(carouselSeconds = seconds, logo = it.logo)
+        }
+        carouselNextAt = clock() + seconds * 1000L
+    }
+
+    /** Lo llama un reloj del programa (varias veces por segundo): pasa a la siguiente imagen cuando toca. */
+    @Synchronized
+    fun tick() {
+        if (_state.value.carouselSeconds > 0 && clock() >= carouselNextAt) carouselStep(+1)
+    }
+
+    private fun isImage(name: String) = name.substringAfterLast('.', "").lowercase() in Library.IMAGE_EXTENSIONS
 
     private fun startCountdown(seconds: Int, text: String): String? {
         if (seconds !in 1..(24 * 3600)) return "La cuenta regresiva debe ser de 1 segundo a 24 horas"

@@ -101,6 +101,10 @@ class RemoteClient(private val scope: CoroutineScope) {
     private val _announcements = MutableStateFlow<List<String>>(emptyList())
     val announcements: StateFlow<List<String>> = _announcements.asStateFlow()
 
+    /** Lo que el PC sabe hacer además de lo básico (Library.features): p. ej. el carrusel. */
+    private val _features = MutableStateFlow<List<String>>(emptyList())
+    val features: StateFlow<List<String>> = _features.asStateFlow()
+
     /** Presentaciones (PowerPoint y PDF) del computador. */
     private val _presentations = MutableStateFlow<List<String>>(emptyList())
     val presentations: StateFlow<List<String>> = _presentations.asStateFlow()
@@ -157,6 +161,13 @@ class RemoteClient(private val scope: CoroutineScope) {
         demo = server
         _status.value = ConnectionStatus.Demo
         server.welcome().forEach(::onMessage)
+        // El reloj de la demostración (para el carrusel), igual que el del PC.
+        job = scope.launch {
+            while (isActive && demo === server) {
+                delay(500)
+                server.tick().forEach(::onMessage)
+            }
+        }
     }
 
     /** Salir de la demostración (para buscar un computador de verdad). */
@@ -173,7 +184,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _songs.value = emptyList(); _bibleName.value = null; _bibleBooks.value = emptyList()
         _bibleChapter.value = null; _bibleResults.value = null; _songResults.value = null
         _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
-        _bibleNames.value = emptyList(); _secondBible.value = null
+        _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
         _plan.value = ServicePlanState(); _savedLists.value = emptyList()
         _auth.value = null
         serverOffset = 0
@@ -282,6 +293,7 @@ class RemoteClient(private val scope: CoroutineScope) {
                 _songs.value = m.songs; _bibleName.value = m.bibleName; _bibleBooks.value = m.bibleBooks
                 _announcements.value = m.announcements
                 _presentations.value = m.presentations
+                _features.value = m.features
                 _sermons.value = m.sermons
                 _bibleNames.value = m.bibleNames
                 _secondBible.value = m.secondBible
