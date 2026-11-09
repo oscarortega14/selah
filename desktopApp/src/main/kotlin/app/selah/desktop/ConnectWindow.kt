@@ -90,6 +90,8 @@ fun ConnectWindow(
     onQrToAnnouncements: (url: String) -> String = { "" },
     /** Celulares de la congregación siguiendo la letra ahora. */
     congregationViewers: () -> Int = { 0 },
+    /** "Letra en el celular de la congregación" encendida en "¿Qué usa tu iglesia?". */
+    congregation: Boolean = true,
 ) {
     var selected by remember { mutableStateOf(addresses.firstOrNull()) }
     val host = selected
@@ -156,7 +158,7 @@ fun ConnectWindow(
                     }
 
                     // 5. Letra para la congregación
-                    if (host != null) CongregationSection("http://$host:$port${Congregation.PATH}", onQrToAnnouncements, congregationViewers)
+                    if (host != null && congregation) CongregationSection("http://$host:$port${Congregation.PATH}", onQrToAnnouncements, congregationViewers)
 
                     // 6. OBS
                     Section("Transmisión en vivo (OBS)") {

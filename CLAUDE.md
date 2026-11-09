@@ -126,6 +126,17 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   líneas `BPM:`, `Compás:`, `Tiempos:`; sonido: `ClickPlayer.android.kt` (AudioTrack + getTimestamp),
   `ClickPlayer.ios.kt` (AVAudioEngine con hora exacta), `escenario.html` (Web Audio)). El PC NO suena. `FEATURE_CLICK`.
   Probado: emulador Android (pista activa, 0 underruns, ±3-4 ms) y vista de escenario. Falta: oído real con 2 equipos.
+- "¿Qué usa tu iglesia?" (`Settings.church: ChurchFeatures`, `MusiciansUi.kt`): interruptores; `RemoteServer.serverFeatures`
+  anuncia solo lo encendido (`FEATURE_CLICK`, `FEATURE_SEQUENCES`, `FEATURE_SCORES`, `FEATURE_CHORDS`) y `Commands.gate`
+  rechaza lo apagado aunque lo pida una app vieja. Por defecto solo la letra para la congregación.
+- Partituras y secuencias (`MusicLibrary.kt`, carpetas `partituras/` y `secuencias/`; `shared/Music.kt`: `matchScores`,
+  `scoreFor`, `Transpose`). Páginas por `GET /partitura/paginas` y `/partitura` (convertidas como las presentaciones;
+  `Presentations(nested = true)`). Secuencias: `SequencePlayer.kt` (Java Sound + mp3spi, `SequenceMixer` arma click
+  izquierda/música derecha), `Presenter.startSequence` usa `ClickState.sequence`/`audible` (sin BPM: 60 "tiempos" por
+  minuto = segundos); la tarjeta de sonido corrige `startAt` cada 2 s. Cambiar de canción NO corta la música.
+- App: modo músico (`MusicianView.kt`, "¿Quién usa este celular?", rol e instrumento guardados en el teléfono),
+  pestaña "Músicos" para el operador, `decodeImage` por plataforma. Probado en el emulador Android con Selah en la Mac
+  (partitura, acordes, secuencia iniciada desde el celular, ±2 ms). Falta: probar en consola real y en iPhone.
 - Mac: `packageDmg` (Apple Silicon). Falta: certificado "Developer ID Application" (solo lo crea el titular de la
   cuenta de Apple) + notarización, y armar también para Mac Intel si alguien lo necesita.
 

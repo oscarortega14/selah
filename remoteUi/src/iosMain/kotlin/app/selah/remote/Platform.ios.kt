@@ -1,5 +1,6 @@
 package app.selah.remote
 
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import app.selah.shared.DEFAULT_PORT
@@ -101,3 +102,7 @@ class IosStore : KeyValueStore {
         pairs.forEach { (k, v) -> defaults.setObject(v, forKey = "selah.$k") }
     }
 }
+
+actual fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
+}.getOrNull()

@@ -19,6 +19,13 @@ import kotlinx.coroutines.flow.update
  * Única fuente de verdad de lo que se proyecta. La ventana de operador y los
  * remotos mandan las mismas órdenes (ClientMessage); todos ven el mismo estado.
  */
+/** Dónde están las secuencias, quién las suena y con qué opciones. */
+class SequenceHookup(
+    val fileFor: (songId: String) -> java.io.File?,
+    val output: SequenceOutput,
+    val options: () -> ChurchFeatures,
+)
+
 class Presenter(
     private val library: Library,
     /** Reloj del PC (inyectable para las pruebas de la cuenta regresiva). */
@@ -59,10 +66,14 @@ class Presenter(
         // Con el carrusel andando, Siguiente/Anterior pasan de imagen (y el tiempo vuelve a empezar).
         ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { manualMove { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
         ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { manualMove { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
-        is ClientMessage.StartClick -> startClick(msg.bpm, msg.beatsPerBar)
-        ClientMessage.StopClick -> { if (_state.value.click?.recording == true) finishRecording(); _state.update { it.copy(click = null) }; null }
-        is ClientMessage.SetTempo -> setTempo(msg.bpm)
-        is ClientMessage.SetAutoLyrics -> { _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = msg.on && c.hasTiming && !c.recording)) } ?: s }; followClick(); null }
+        is ClientMessage.StartClick -> if (_state.value.click?.sequence != null) "Ya suena la secuencia: el click va con ella" else startClick(msg.bpm, msg.beatsPerBar)
+        ClientMessage.StopClick, ClientMessage.StopSequence -> { stopClickAndSequence(); null }
+        ClientMessage.StartSequence -> startSequence()
+        is ClientMessage.SetTempo -> if (_state.value.click?.sequence != null) "El tempo lo lleva la secuencia" else setTempo(msg.bpm)
+        is ClientMessage.SetAutoLyrics -> {
+            _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = msg.on && c.hasTiming && !c.recording && followsThisSong(s))) } ?: s }
+            followClick(); null
+        }
         is ClientMessage.RecordTiming -> if (msg.on) startRecording() else finishRecording()
         is ClientMessage.StartCarousel -> startCarousel(msg.seconds, msg.names)
         ClientMessage.StopCarousel -> { _state.update { it.copy(carouselSeconds = 0) }; null }
@@ -84,6 +95,70 @@ class Presenter(
         ClientMessage.StopTimer -> { _state.update { it.copy(timerStart = null, timerMinutes = 0) }; null }
         // Las órdenes de la lista del culto las atiende ServicePlan (ver Commands).
         else -> "Orden no soportada aquí"
+    }
+
+    // --- Secuencias: el PC reproduce el audio de la canción; el click y la letra van con él ---
+    /** Cómo encontrar y reproducir las secuencias (null = este PC no las tiene, p. ej. en las pruebas). */
+    var sequences: SequenceHookup? = null
+
+    /** Canción de la secuencia que suena (la letra automática solo vale con ella en pantalla). */
+    private var sequenceSongId: String? = null
+    /** Sube con cada secuencia: los avisos de una anterior se ignoran. */
+    private var sequenceGen = 0
+
+    /** ¿La letra automática puede seguir lo que está en pantalla? (con secuencia, solo si es su canción) */
+    private fun followsThisSong(s: PresentationState): Boolean = s.click?.sequence == null || (s.songId == sequenceSongId && !s.isBible && !s.sermon)
+
+    private fun stopClickAndSequence() {
+        if (_state.value.click?.recording == true) finishRecording()
+        if (_state.value.click?.sequence != null) { sequences?.output?.stop(); sequenceGen++; sequenceSongId = null }
+        _state.update { it.copy(click = null) }
+    }
+
+    private fun startSequence(): String? {
+        val hook = sequences ?: return "Las secuencias están apagadas en \"¿Qué usa tu iglesia?\""
+        val s = _state.value
+        val song = s.songId?.takeIf { !s.isBible && !s.sermon && s.media == null && s.presentation == null }?.let { library.song(it) }
+            ?: return "Primero pon en pantalla la canción de la secuencia"
+        val file = hook.fileFor(song.id) ?: return "\"${song.title}\" no tiene secuencia: pon el audio (MP3 o WAV) en la carpeta secuencias con el nombre de la canción"
+        hook.output.check(file)?.let { return it }
+        if (s.click != null) stopClickAndSequence()
+        val opts = hook.options()
+        val beats = song.beatsPerBar ?: 4
+        val split = opts.splitClick && song.bpm != null
+        val countIn = if (split) beats else 0
+        // Sin BPM no hay click: los "tiempos" de la letra automática cuentan segundos (60 por minuto).
+        val bpm = song.bpm ?: 60
+        clickTiming = song.timing
+        val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
+        val gen = ++sequenceGen
+        sequenceSongId = song.id
+        val start = clock() + SEQUENCE_LEAD_MS + Math.round(countIn * 60_000.0 / bpm)
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = song.bpm != null)) }
+        hook.output.play(file, SequencePlan(song.bpm, beats, countIn, split, opts.audioDevice), object : SequenceOutput.Listener {
+            override fun musicStartsAt(wallMs: Long) = sequenceStartsAt(gen, wallMs)
+            override fun finished(error: String?) = sequenceFinished(gen, error)
+        })
+        return null
+    }
+
+    @Synchronized
+    private fun sequenceStartsAt(gen: Int, wallMs: Long) {
+        if (gen != sequenceGen) return
+        _state.update { s ->
+            val c = s.click?.takeIf { it.sequence != null } ?: return@update s
+            // Solo si se corrió algo que se note (cada cambio se manda a todos los celulares).
+            if (kotlin.math.abs(c.startAt - wallMs) < 4) s else s.copy(click = c.copy(startAt = wallMs))
+        }
+    }
+
+    @Synchronized
+    private fun sequenceFinished(gen: Int, error: String?) {
+        if (gen != sequenceGen) return
+        if (error != null) Log.warn(error)
+        if (_state.value.click?.recording == true) finishRecording()
+        sequenceSongId = null
+        _state.update { it.copy(click = null) }
     }
 
     // --- Click de los músicos y letra automática ---
@@ -134,6 +209,7 @@ class Presenter(
         val s = _state.value
         val c = s.click ?: return "Primero inicia el click"
         if (s.songId == null || s.isBible || s.sermon || s.media != null || s.presentation != null) return "Solo se graban los tiempos de una canción"
+        if (!followsThisSong(s)) return "Con la secuencia andando, se graban los tiempos de su canción"
         recorded.clear()
         if (s.index >= 0) recorded[s.index] = Math.round(c.beatAt(clock())).toInt().coerceAtLeast(0)
         _state.update { it.copy(click = c.copy(recording = true, auto = false)) }
@@ -162,7 +238,7 @@ class Presenter(
     private fun followClick() {
         val s = _state.value
         val c = s.click ?: return
-        if (!c.auto || c.recording) return
+        if (!c.auto || c.recording || !followsThisSong(s)) return
         val target = autoSlide(clickTiming, c.beatAt(clock())) ?: return
         if (target != s.index && target in s.slides.indices) _state.update { it.copy(index = target) }
     }
@@ -177,6 +253,9 @@ class Presenter(
                 ),
             )
         }
+        // Volvieron a la canción de la secuencia: la letra la sigue otra vez.
+        if (song.id == sequenceSongId) _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = c.hasTiming)) } ?: s }
+        followClick()
         onShown?.invoke(HistoryEntry.Kind.SONG, song.title, song.id)
         return null
     }
@@ -321,10 +400,16 @@ class Presenter(
         lowerThird = lowerThird,
         lowerThirdSub = lowerThirdSub,
         logo = false,
+        // La secuencia sigue sonando aunque se cambie lo que está en pantalla (cortar la música por un toque
+        // equivocado sería peor); la letra automática se pausa. Un click solo se detiene, como antes.
+        click = click?.takeIf { it.sequence != null }?.copy(auto = false, recording = false),
     )
 
     companion object {
         /** Tiempo para que la orden de empezar llegue a todos los celulares antes de la cuenta. */
         const val CLICK_LEAD_MS = 1_200L
+
+        /** Lo que tarda en arrancar el audio (se corrige solo con lo que dice la tarjeta de sonido). */
+        const val SEQUENCE_LEAD_MS = 300L
     }
 }

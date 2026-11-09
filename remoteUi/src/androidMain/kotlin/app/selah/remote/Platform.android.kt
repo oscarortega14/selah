@@ -1,5 +1,6 @@
 package app.selah.remote
 
+import androidx.compose.ui.graphics.asImageBitmap
 import android.content.Context
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,3 +78,7 @@ class AndroidStore(context: Context) : KeyValueStore {
         prefs.edit().apply { pairs.forEach { (k, v) -> putString(k, v) } }.apply()
     }
 }
+
+actual fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+}.getOrNull()

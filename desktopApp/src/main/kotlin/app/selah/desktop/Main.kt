@@ -57,9 +57,17 @@ fun main() {
         onSelectSecondBible = { name -> if (library.selectSecondBible(name)) settingsStore.update { it.copy(secondBible = name) } }
     }
     val presenter = commands.presenter
+    // Lo de los músicos: partituras y secuencias (carpetas partituras/ y secuencias/).
+    val music = MusicLibrary(baseDir).also { it.refresh(library.catalog.value.songs) }
+    commands.church = { settingsStore.value.church }
+    presenter.sequences = SequenceHookup(
+        fileFor = { id -> if (settingsStore.value.church.sequences) music.sequenceFor(id) else null },
+        output = JavaSoundSequenceOutput(),
+        options = { settingsStore.value.church },
+    )
     // Clave para controlar desde la red: se crea sola la primera vez (se puede cambiar o quitar).
     if (settingsStore.value.pin == null) settingsStore.update { it.copy(pin = Settings.randomPin()) }
-    val server = RemoteServer(commands, library, pin = settingsStore.pin)
+    val server = RemoteServer(commands, library, pin = settingsStore.pin, church = settingsStore.church, music = music)
     val backups = Backups(baseDir, settingsStore)
     val serverError = runCatching { server.start() }.exceptionOrNull()?.let {
         Log.error("No pude abrir el puerto ${server.port}", it)
@@ -97,7 +105,10 @@ fun main() {
         LaunchedEffect(Unit) {
             while (true) {
                 kotlinx.coroutines.delay(5000)
-                withContext(Dispatchers.IO) { library.refreshAnnouncements() }
+                withContext(Dispatchers.IO) {
+                    library.refreshAnnouncements()
+                    music.refresh(library.catalog.value.songs)
+                }
             }
         }
         var confirmProjectorOff by remember { mutableStateOf(false) }
@@ -109,6 +120,8 @@ fun main() {
         var backupsOpen by remember { mutableStateOf(false) }
         var biblesOpen by remember { mutableStateOf(false) }
         var servicesOpen by remember { mutableStateOf(false) }
+        var musiciansOpen by remember { mutableStateOf(false) }
+        val musicCatalog by music.catalog.collectAsState()
         // Respaldo semanal automático, un rato después de abrir.
         LaunchedEffect(Unit) {
             kotlinx.coroutines.delay(30_000)
@@ -182,7 +195,15 @@ fun main() {
                         openServices = { servicesOpen = true },
                     )
                 }
-                androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship) {
+                val musicians = Musicians(
+                    church = settings.church,
+                    catalog = musicCatalog,
+                    update = { f -> settingsStore.update { it.copy(church = f(it.church)) } },
+                    songTitle = { id -> library.song(id)?.title ?: id },
+                    music = music,
+                    open = { musiciansOpen = true },
+                )
+                androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship, LocalMusicians provides musicians) {
                 OperatorScreen(
                     state = state,
                     catalog = catalog,
@@ -230,6 +251,7 @@ fun main() {
                     presentationsReady = presentationsReady,
                 )
                 if (servicesOpen) ServicesWindow(worship, onClose = { servicesOpen = false })
+                if (musiciansOpen) MusiciansWindow(musicians, onClose = { musiciansOpen = false; music.refresh(library.catalog.value.songs) })
                 }
                 // La primera vez: guía corta. Después del aviso del firewall, para no encimar ventanas.
                 if (!settings.welcomeDone && !askFirewall) {
@@ -313,6 +335,7 @@ fun main() {
                         .fold({ "Listo: está en Anuncios como «${it.substringBeforeLast('.')}». También entra en el carrusel." }, { "No pude crear la imagen: ${it.message}" })
                 },
                 congregationViewers = { server.congregationViewers },
+                congregation = settings.church.congregation,
                 ndiOn = ndiOn,
                 ndiReceivers = ndiReceivers,
                 onNdi = { kind, want ->

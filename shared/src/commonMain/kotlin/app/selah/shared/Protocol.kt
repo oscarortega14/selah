@@ -163,6 +163,16 @@ sealed interface ClientMessage {
     @Serializable @SerialName("record_timing")
     data class RecordTiming(val on: Boolean) : ClientMessage
 
+    /**
+     * Secuencia de la canción en pantalla (archivo de la carpeta secuencias): la reproduce el PC y la letra la
+     * sigue. Solo para un PC que dice [FEATURE_SEQUENCES].
+     */
+    @Serializable @SerialName("sequence_start")
+    data object StartSequence : ClientMessage
+
+    @Serializable @SerialName("sequence_stop")
+    data object StopSequence : ClientMessage
+
     /** Para sincronizar relojes: el PC responde [ServerMessage.Pong] con su hora. Se permite sin clave. */
     @Serializable @SerialName("ping")
     data class Ping(val clientTime: Long) : ClientMessage
@@ -231,6 +241,10 @@ sealed interface ServerMessage {
         val features: List<String> = emptyList(),
         /** Avisar si una canción se cantó en estos últimos días (0 = no avisar / PC viejo). */
         val repeatDays: Int = 0,
+        /** Partituras por canción e instrumento (solo con [FEATURE_SCORES]); se ven en GET /partitura. */
+        val scores: List<ScoreRef> = emptyList(),
+        /** Canciones (ids) que tienen secuencia (solo con [FEATURE_SEQUENCES]). */
+        val sequences: List<String> = emptyList(),
     ) : ServerMessage
 
     @Serializable @SerialName("state")
@@ -284,10 +298,18 @@ sealed interface ServerMessage {
 /** Capacidad de Hello: entiende State.keepSlides. */
 const val FEATURE_KEEP_SLIDES = "keepSlides"
 
-/** Capacidad del PC (Library.features): click sincronizado, letra automática y Ping/Pong. */
+/**
+ * Capacidad del PC (Library.features): click sincronizado y letra automática. Ping/Pong lo atiende cualquier PC
+ * desde la 2.7 (también para las secuencias, que dicen [FEATURE_SEQUENCES]).
+ */
 const val FEATURE_CLICK = "click"
 const val CLICK_MIN_BPM = 30
 const val CLICK_MAX_BPM = 250
+
+/** Capacidades del PC (Library.features), según lo que la iglesia encendió en "¿Qué usa tu iglesia?". */
+const val FEATURE_SCORES = "scores"
+const val FEATURE_CHORDS = "chords"
+const val FEATURE_SEQUENCES = "sequences"
 
 /** Capacidad del PC (Library.features): entiende StartCarousel/StopCarousel. */
 const val FEATURE_CAROUSEL = "carousel"

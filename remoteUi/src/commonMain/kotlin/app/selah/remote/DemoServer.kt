@@ -142,6 +142,9 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
                 }
             }
             ClientMessage.StopClick -> { state = state.copy(click = null); null }
+            // La demostración no tiene audios de secuencias.
+            ClientMessage.StartSequence -> "En la demostración no hay secuencias: se ponen en el computador"
+            ClientMessage.StopSequence -> { state = state.copy(click = null); null }
             is ClientMessage.SetTempo -> state.click?.let { c ->
                 if (msg.bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) return@let "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
                 val now = clock()

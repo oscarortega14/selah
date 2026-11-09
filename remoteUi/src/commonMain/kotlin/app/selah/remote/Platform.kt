@@ -81,3 +81,6 @@ fun uploadFileName(suggested: String?, extension: String, generic: String = "anu
 }
 
 private val UUID_LIKE = Regex("""^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$""")
+
+/** Imagen (PNG o JPG) para mostrar, o null si no se puede leer. Para las páginas de las partituras. */
+expect fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap?

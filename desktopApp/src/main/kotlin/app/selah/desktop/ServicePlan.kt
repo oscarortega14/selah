@@ -215,7 +215,10 @@ class Commands(
     var onSelectBible: (String) -> Unit = {}
     var onSelectSecondBible: (String?) -> Unit = {}
 
-    fun handle(msg: ClientMessage): String? = when (msg) {
+    /** "¿Qué usa tu iglesia?": lo apagado no se puede pedir ni desde un celular viejo. */
+    var church: () -> ChurchFeatures = { ChurchFeatures.ALL }
+
+    fun handle(msg: ClientMessage): String? = gate(msg) ?: when (msg) {
         is ClientMessage.SelectBible -> { onSelectBible(msg.name); null }
         is ClientMessage.SetSecondBible -> { onSelectSecondBible(msg.name); null }
         is ClientMessage.PlanAddSong, is ClientMessage.PlanAddBible, is ClientMessage.PlanRemove,
@@ -226,7 +229,20 @@ class Commands(
         else -> presenter.handle(msg)
     }
 
+    private fun gate(msg: ClientMessage): String? {
+        val c = church()
+        return when (msg) {
+            is ClientMessage.StartClick -> if (!c.click) OFF_CLICK else null
+            ClientMessage.StartSequence -> if (!c.sequences) OFF_SEQUENCES else null
+            is ClientMessage.SetTempo, is ClientMessage.RecordTiming, is ClientMessage.SetAutoLyrics -> if (!c.click && !c.sequences) OFF_CLICK else null
+            else -> null
+        }
+    }
+
     companion object {
+        const val OFF_CLICK = "El click está apagado en \"¿Qué usa tu iglesia?\" (en el computador)"
+        const val OFF_SEQUENCES = "Las secuencias están apagadas en \"¿Qué usa tu iglesia?\" (en el computador)"
+
         fun create(library: Library): Commands {
             val presenter = Presenter(library)
             val plan = ServicePlan(File(library.baseDir, "lista-del-culto.json"), library, presenter::handle)

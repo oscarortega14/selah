@@ -49,7 +49,12 @@ class RemoteServer(
     val port: Int = DEFAULT_PORT,
     /** Clave para controlar (null = no se pide). */
     private val pin: kotlinx.coroutines.flow.StateFlow<String?> = kotlinx.coroutines.flow.MutableStateFlow(null),
+    /** "¿Qué usa tu iglesia?" (las pruebas: todo encendido). */
+    private val church: kotlinx.coroutines.flow.StateFlow<ChurchFeatures> = kotlinx.coroutines.flow.MutableStateFlow(ChurchFeatures.ALL),
+    /** Partituras y secuencias (null = no hay). */
+    private val music: MusicLibrary? = null,
 ) {
+    private val musicCatalog: kotlinx.coroutines.flow.Flow<MusicCatalog> = music?.catalog ?: kotlinx.coroutines.flow.flowOf(MusicCatalog())
     private val guard = PinGuard(pin)
     private val presenter get() = commands.presenter
     private val historyEntries: kotlinx.coroutines.flow.Flow<Any?> = commands.history?.entries ?: kotlinx.coroutines.flow.flowOf(null)
@@ -100,6 +105,25 @@ class RemoteServer(
                 }
                 if (file == null) call.respondText("No encontrada", status = HttpStatusCode.NotFound)
                 else call.respondFile(file)
+            }
+            // Partituras (solo lectura): GET /partitura/paginas?nombre=x.pdf → {"paginas":3}; GET /partitura?nombre=x.pdf&n=0 → imagen.
+            get("/partitura/paginas") {
+                val name = call.request.queryParameters["nombre"].orEmpty()
+                val pages = music?.takeIf { church.value.scores }?.scorePages
+                if (pages?.file(name) == null) { call.respondText("No encontrada", status = HttpStatusCode.NotFound); return@get }
+                val count = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { pages.pages(name).size } }
+                count.onSuccess { call.respondText("{\"paginas\":$it}", ContentType.Application.Json) }
+                    .onFailure { call.respondText(it.message ?: "No pude abrir la partitura", status = HttpStatusCode.UnprocessableEntity) }
+            }
+            get("/partitura") {
+                val name = call.request.queryParameters["nombre"].orEmpty()
+                val n = call.request.queryParameters["n"]?.toIntOrNull()
+                val pages = music?.takeIf { church.value.scores }?.scorePages
+                // pages() espera si la partitura se está convirtiendo en este momento.
+                val file = if (pages != null && n != null && pages.file(name) != null)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { pages.pages(name).getOrNull(n) }.getOrNull() }
+                else null
+                if (file == null) call.respondText("No encontrada", status = HttpStatusCode.NotFound) else call.respondFile(file)
             }
             // Subir un anuncio (foto o video) desde el celular: POST /anuncios?nombre=foto.jpg con la clave en X-Proyecta-Pin.
             post("/anuncios") {
@@ -173,13 +197,20 @@ class RemoteServer(
             // Páginas web: control remoto (/), vista de escenario y letras para OBS.
             staticResources("/", "web", index = "index.html")
             // Letra para la congregación: dirección corta para el código QR.
-            get(Congregation.PATH) { call.respondRedirect("${Congregation.PATH}.html") }
+            get(Congregation.PATH) {
+                if (church.value.congregation) call.respondRedirect("${Congregation.PATH}.html")
+                else call.respondText("La letra en el celular está apagada en este computador", status = HttpStatusCode.NotFound)
+            }
             // Canal solo de lectura para esa página: recibe lo que se ve en el videobeam y nada más
             // (ni mensajes al escenario, ni tiempos, ni la biblioteca). Lo que mande el celular se ignora.
             webSocket(Congregation.WS_PATH) {
                 val address = call.request.local.remoteAddress
                 if (!NetGuard.trusted(call.request.headers["Host"], call.request.headers["Origin"], pcName)) {
                     close(io.ktor.websocket.CloseReason(io.ktor.websocket.CloseReason.Codes.VIOLATED_POLICY, "Origen no permitido"))
+                    return@webSocket
+                }
+                if (!church.value.congregation) {
+                    close(io.ktor.websocket.CloseReason(io.ktor.websocket.CloseReason.Codes.NORMAL, "Apagado"))
                     return@webSocket
                 }
                 if (viewers.incrementAndGet() > Congregation.MAX_VIEWERS || !NetGuard.acquire(address)) {
@@ -230,11 +261,13 @@ class RemoteServer(
                     launch { pin.collect { send(Frame.Text(auth().encode())) } }
                     launch {
                         // Con la fecha en que se cantó cada canción (historial) y el aviso de repetidas (cultos).
-                        kotlinx.coroutines.flow.combine(library.catalog, historyEntries, servicesConfig) { c, _, cfg ->
+                        kotlinx.coroutines.flow.combine(library.catalog, historyEntries, servicesConfig, church, musicCatalog) { c, _, cfg, ch, mus ->
                             val sung = commands.history?.lastSung().orEmpty()
                             ServerMessage.Library(
                                 withLastSung(c.songs, sung), c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons,
-                                c.bibleNames, c.secondBibleName, c.presentations, features = SERVER_FEATURES, repeatDays = cfg.repeatDays,
+                                c.bibleNames, c.secondBibleName, c.presentations, features = serverFeatures(ch), repeatDays = cfg.repeatDays,
+                                scores = if (ch.scores) mus.scores else emptyList(),
+                                sequences = if (ch.sequences) mus.sequences.keys.toList() else emptyList(),
                             )
                         }.distinctUntilChanged().collect { m -> send(Frame.Text(m.encode())) }
                     }
@@ -312,8 +345,14 @@ class RemoteServer(
         /** Tope de lo que se puede subir desde un celular (un video corto). */
         const val MAX_UPLOAD = 300_000_000L
 
-        /** Lo que este PC sabe hacer además de lo básico: las apps solo ofrecen eso si aparece aquí. */
-        val SERVER_FEATURES = listOf(app.selah.shared.FEATURE_CAROUSEL, app.selah.shared.FEATURE_CLICK)
+        /** Lo que este PC ofrece además de lo básico: las apps solo muestran eso si aparece aquí. */
+        fun serverFeatures(c: ChurchFeatures): List<String> = buildList {
+            add(app.selah.shared.FEATURE_CAROUSEL)
+            if (c.click) add(app.selah.shared.FEATURE_CLICK)
+            if (c.sequences) add(app.selah.shared.FEATURE_SEQUENCES)
+            if (c.scores) add(app.selah.shared.FEATURE_SCORES)
+            if (c.chords) add(app.selah.shared.FEATURE_CHORDS)
+        }
         private val uploadSlots = kotlinx.coroutines.sync.Semaphore(3)
 
         /** Tope de toda la carpeta de anuncios al subir desde la red (para que nadie llene el disco). */

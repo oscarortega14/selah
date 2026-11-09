@@ -130,6 +130,10 @@ data class ClickState(
     val hasTiming: Boolean = false,
     /** Grabando en qué tiempo cambia cada diapositiva. */
     val recording: Boolean = false,
+    /** Secuencia que suena en el PC (nombre del archivo), o null: el click y la letra van con ella. */
+    val sequence: String? = null,
+    /** false = la secuencia no tiene BPM: no hay toc en los celulares (los tiempos cuentan segundos). */
+    val audible: Boolean = true,
 ) {
     val beatMs: Double get() = 60_000.0 / bpm
 

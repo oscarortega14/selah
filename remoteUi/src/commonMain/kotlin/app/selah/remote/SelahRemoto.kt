@@ -150,6 +150,7 @@ fun SelahRemoto(
                         linkKey = link,
                         onConnect = connect,
                         topBanner = topBanner,
+                        store = store,
                     )
                     NoticeHost(notices)
                 }

@@ -35,13 +35,23 @@ import kotlin.math.floor
  * Aquí NO suena (para que nunca salga por los parlantes): suena en los celulares con audífonos.
  */
 @Composable
-fun ClickBar(click: ClickState?, isSong: Boolean, send: (ClientMessage) -> Unit) {
+fun ClickBar(
+    click: ClickState?,
+    isSong: Boolean,
+    send: (ClientMessage) -> Unit,
+    church: ChurchFeatures = ChurchFeatures.ALL,
+    /** La canción en pantalla tiene secuencia (y las secuencias están encendidas). */
+    hasSequence: Boolean = false,
+) {
     var tempo by remember { mutableStateOf("") }
     if (click == null) {
-        if (!isSong) return
+        if (!isSong || (!church.click && !hasSequence)) return
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).hand()) { Text("♩ Click para los músicos") }
-            OutlinedTextField(tempo, { v -> tempo = v.filter { it.isDigit() }.take(3) }, placeholder = { Text("BPM") }, singleLine = true, modifier = Modifier.width(80.dp).marksTyping())
+            if (hasSequence) Button({ send(ClientMessage.StartSequence) }, Modifier.weight(1f).hand()) { Text("▶ Secuencia") }
+            if (church.click) {
+                OutlinedButton({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).hand()) { Text("♩ Click para los músicos") }
+                OutlinedTextField(tempo, { v -> tempo = v.filter { it.isDigit() }.take(3) }, placeholder = { Text("BPM") }, singleLine = true, modifier = Modifier.width(80.dp).marksTyping())
+            }
         }
         return
     }
@@ -53,13 +63,21 @@ fun ClickBar(click: ClickState?, isSong: Boolean, send: (ClientMessage) -> Unit)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             val color = if (down) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
             Box(Modifier.size(18.dp).clip(CircleShape).background(color.copy(alpha = 0.15f + 0.85f * glow)))
-            Text(
-                "♩ ${click.bpm} · " + if (whole < 0) "cuenta" else click.barAndBeat(whole).let { (b, t) -> "compás $b · $t" },
-                Modifier.weight(1f), style = MaterialTheme.typography.labelLarge,
-            )
-            TextButton({ send(ClientMessage.SetTempo(click.bpm - 1)) }, Modifier.hand()) { Text("−") }
-            TextButton({ send(ClientMessage.SetTempo(click.bpm + 1)) }, Modifier.hand()) { Text("+") }
-            TextButton({ send(ClientMessage.StopClick) }, Modifier.hand()) { Text("■") }
+            val where = when {
+                !click.audible -> sequenceClock(beat)
+                whole < 0 -> "cuenta"
+                else -> click.barAndBeat(whole).let { (b, t) -> "compás $b · $t" }
+            }
+            val seq = click.sequence
+            val head = if (seq != null) "▶ ${seq.substringBeforeLast('.')}" + (if (click.audible) " · ♩ ${click.bpm}" else "") else "♩ ${click.bpm}"
+            Text("$head · $where", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            if (click.sequence == null) {
+                TextButton({ send(ClientMessage.SetTempo(click.bpm - 1)) }, Modifier.hand()) { Text("−") }
+                TextButton({ send(ClientMessage.SetTempo(click.bpm + 1)) }, Modifier.hand()) { Text("+") }
+                TextButton({ send(ClientMessage.StopClick) }, Modifier.hand()) { Text("■") }
+            } else {
+                Button({ send(ClientMessage.StopSequence) }, Modifier.hand()) { Text("■ Parar") }
+            }
         }
         when {
             click.recording -> Button({ send(ClientMessage.RecordTiming(false)) }, Modifier.fillMaxWidth().hand()) { Text("● Grabando tiempos · Terminar") }
@@ -68,4 +86,10 @@ fun ClickBar(click: ClickState?, isSong: Boolean, send: (ClientMessage) -> Unit)
             else -> TextButton({ send(ClientMessage.RecordTiming(true)) }, Modifier.hand()) { Text("● Grabar tiempos (para la letra automática)") }
         }
     }
+}
+
+/** Sin BPM la secuencia cuenta segundos: "1:23". */
+internal fun sequenceClock(seconds: Double): String {
+    val s = seconds.toLong().coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
 }

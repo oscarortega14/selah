@@ -17,7 +17,12 @@ import javax.imageio.ImageIO
  * PowerPoint se dibuja sin Office (Apache POI): las fuentes y efectos raros pueden verse un poco
  * distinto. Para que se vea idéntico: en PowerPoint, Archivo → Exportar → PDF.
  */
-class Presentations(val dir: File) {
+class Presentations(
+    val dir: File,
+    /** También archivos dentro de una subcarpeta ("Canción/Bajo.pdf"): para las partituras. */
+    private val nested: Boolean = false,
+    private val extensions: Set<String> = EXTENSIONS,
+) {
     val cacheDir = File(dir, ".diapositivas")
 
     private val _ready = kotlinx.coroutines.flow.MutableStateFlow(0)
@@ -25,12 +30,25 @@ class Presentations(val dir: File) {
     val ready: kotlinx.coroutines.flow.StateFlow<Int> = _ready
 
     /** Archivos que se pueden mostrar, ordenados por nombre. */
-    fun list(): List<String> = dir.listFiles { f -> f.isFile && isPresentation(f.name) && !f.name.startsWith("~$") }.orEmpty()
-        .sortedBy { normalizeText(it.name) }.map { it.name }
+    fun list(): List<String> {
+        fun ok(f: File) = f.isFile && accepts(f.name) && !f.name.startsWith("~$") && !f.name.startsWith(".")
+        val top = dir.listFiles { f -> ok(f) }.orEmpty().map { it.name }
+        val inside = if (!nested) emptyList() else dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") }.orEmpty()
+            .flatMap { d -> d.listFiles { f -> ok(f) }.orEmpty().map { "${d.name}/${it.name}" } }
+        return (top + inside).sortedBy { normalizeText(it) }
+    }
 
-    /** El archivo, solo si está dentro de la carpeta (nada de "../"). */
-    fun file(name: String): File? =
-        File(dir, name).takeIf { it.isFile && it.parentFile == dir && isPresentation(name) }
+    private fun accepts(name: String) = name.substringAfterLast('.', "").lowercase() in extensions
+
+    /** El archivo, solo si está dentro de la carpeta (nada de "../"; con [nested], a lo sumo una subcarpeta). */
+    fun file(name: String): File? {
+        if (!accepts(name) || name.contains('\\') || name.split('/').any { it.isEmpty() || it == "." || it == ".." || it.startsWith(".") }) return null
+        val parts = name.split('/')
+        if (parts.size > (if (nested) 2 else 1)) return null
+        val f = File(dir, name)
+        val parent = if (parts.size == 2) f.parentFile?.parentFile else f.parentFile
+        return f.takeIf { it.isFile && parent == dir }
+    }
 
     private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
 
@@ -50,8 +68,9 @@ class Presentations(val dir: File) {
             out.mkdirs()
             val count = try {
                 render(src) { index, image ->
-                    ImageIO.write(image, "png", File(out, pageName(index)))
-                    ImageIO.write(thumbnail(image), "png", File(out, THUMB_PREFIX + pageName(index)))
+                    // A un temporal y luego el nombre final: quien pida la página nunca recibe una imagen a medias.
+                    writeAtomically(image, File(out, pageName(index)))
+                    writeAtomically(thumbnail(image), File(out, THUMB_PREFIX + pageName(index)))
                 }
             } catch (e: Throwable) {
                 // También falta de memoria o un archivo que hace recursión infinita: un mensaje, no un cierre.
@@ -110,6 +129,12 @@ class Presentations(val dir: File) {
         val EXTENSIONS = setOf("pdf", "pptx")
 
         fun isPresentation(name: String) = name.substringAfterLast('.', "").lowercase() in EXTENSIONS
+
+        private fun writeAtomically(image: BufferedImage, target: File) {
+            val tmp = File(target.parentFile, ".${target.name}.tmp")
+            ImageIO.write(image, "png", tmp)
+            java.nio.file.Files.move(tmp.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+        }
 
         private fun pageName(index: Int) = "%04d.png".format(index + 1)
         private const val THUMB_PREFIX = "mini-"

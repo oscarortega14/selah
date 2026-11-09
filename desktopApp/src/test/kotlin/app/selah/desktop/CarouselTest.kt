@@ -138,6 +138,6 @@ class CarouselTest {
         // Un PC viejo no manda "features": la app no ofrece el carrusel.
         val oldLibrary = """{"type":"library","songs":[]}"""
         assertEquals(emptyList(), (decodeServerMessage(oldLibrary) as ServerMessage.Library).features)
-        assertTrue(app.selah.shared.FEATURE_CAROUSEL in RemoteServer.SERVER_FEATURES)
+        assertTrue(app.selah.shared.FEATURE_CAROUSEL in RemoteServer.serverFeatures(ChurchFeatures()))
     }
 }

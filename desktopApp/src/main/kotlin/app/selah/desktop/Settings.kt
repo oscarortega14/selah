@@ -30,6 +30,8 @@ data class Settings(
     val backupCopyDir: String? = null,
     /** Fuentes NDI encendidas (nombres de NdiOutput.Kind). */
     val ndi: Set<String> = emptySet(),
+    /** "¿Qué usa tu iglesia?": lo que está apagado no aparece ni en el PC ni en los celulares. */
+    val church: ChurchFeatures = ChurchFeatures(),
 ) {
     /** La clave que se exige ahora (null = no se pide). */
     val activePin: String? get() = pin?.takeIf { !pinOff }
@@ -45,6 +47,30 @@ data class Settings(
     }
 }
 
+/** Lo que usa cada iglesia además de letra y Biblia (que van siempre). */
+@Serializable
+data class ChurchFeatures(
+    /** Click para los músicos y letra automática. */
+    val click: Boolean = false,
+    /** Secuencias: el PC reproduce el audio de la canción y la letra lo sigue. */
+    val sequences: Boolean = false,
+    /** Partituras por instrumento en el celular de cada músico. */
+    val scores: Boolean = false,
+    /** Acordes en el celular de los músicos (y cambiar el tono). */
+    val chords: Boolean = false,
+    /** Letra en el celular de la congregación (código QR). */
+    val congregation: Boolean = true,
+    /** Salida de sonido de las secuencias (nombre del dispositivo; null = la del sistema). */
+    val audioDevice: String? = null,
+    /** Click a la izquierda y música a la derecha (para mandar cada uno a un canal de la consola). */
+    val splitClick: Boolean = false,
+) {
+    companion object {
+        /** Todo encendido (las pruebas y quien quiera verlo todo). */
+        val ALL = ChurchFeatures(click = true, sequences = true, scores = true, chords = true, congregation = true)
+    }
+}
+
 class SettingsStore(private val file: File) {
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
@@ -54,11 +80,16 @@ class SettingsStore(private val file: File) {
     /** Clave en uso (para el servidor de los remotos). */
     val pin: StateFlow<String?> = _pin.asStateFlow()
 
+    private val _church = MutableStateFlow(_settings.value.church)
+    /** "¿Qué usa tu iglesia?" (para el servidor y el presentador). */
+    val church: StateFlow<ChurchFeatures> = _church.asStateFlow()
+
     fun update(f: (Settings) -> Settings) {
         val new = f(_settings.value)
         if (new == _settings.value) return
         _settings.value = new
         _pin.value = new.activePin
+        _church.value = new.church
         runCatching {
             file.parentFile?.mkdirs()
             file.writeText(ProtocolJson.encodeToString(Settings.serializer(), new), Charsets.UTF_8)

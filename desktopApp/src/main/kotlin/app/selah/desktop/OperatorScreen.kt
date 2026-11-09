@@ -216,6 +216,8 @@ private fun TopBar(
                 Text("Nueva versión $v")
             }
         }
+        val musicians = LocalMusicians.current
+        OutlinedButton(musicians.open) { Text("¿Qué usa tu iglesia?") }
         OutlinedButton(onOpenHistory) { Text("Historial") }
         OutlinedButton(onOpenBackgrounds) { Text("Fondos y letra") }
         OutlinedButton(onOpenConnect) {
@@ -551,7 +553,9 @@ private fun LivePanel(state: PresentationState, modifier: Modifier, send: (Clien
                 Text(if (state.logo) "Quitar logo" else "Logo (L)")
             }
         }
-        ClickBar(state.click, isSong = state.songId != null && !state.isBible && !state.sermon && state.media == null && state.presentation == null, send = send)
+        val isSong = state.songId != null && !state.isBible && !state.sermon && state.media == null && state.presentation == null
+        val musicians = LocalMusicians.current
+        ClickBar(state.click, isSong = isSong, send = send, church = musicians.church, hasSequence = isSong && musicians.hasSequence(state.songId))
         HorizontalDivider()
         Row(
             Modifier.fillMaxWidth().handClickable { avisosOpen = !avisosOpen }.padding(vertical = 4.dp),

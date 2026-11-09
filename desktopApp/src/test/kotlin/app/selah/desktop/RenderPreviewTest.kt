@@ -40,6 +40,18 @@ class RenderPreviewTest {
             "7-logo" to (song.copy(logo = true) to Theme(image = "bg", logo = "bg")),
             "8-alerta" to (song.copy(alert = "Se busca al dueño del carro de placas ABC123, favor acercarse a la entrada") to Theme.PRESETS[1].second),
         )
+        // "¿Qué usa tu iglesia?" con todo encendido, partituras y secuencias.
+        val musicians = Musicians(
+            church = ChurchFeatures.ALL.copy(splitClick = true),
+            catalog = MusicCatalog(
+                scores = listOf(app.selah.shared.ScoreRef("Gracia admirable", "Bajo", "a"), app.selah.shared.ScoreRef("Gracia admirable", "Teclado", "b"), app.selah.shared.ScoreRef("Sublime gracia", app.selah.shared.GENERAL_INSTRUMENT, "c")),
+                scoreOrphans = listOf("Cancion mal escrita - Bajo.pdf"),
+                sequences = mapOf("Gracia admirable" to "Gracia admirable.mp3"),
+            ),
+        )
+        ImageComposeScene(820, 1500, Density(1f)) { MusiciansContent(musicians, devices = listOf("Altavoces del MacBook Pro", "Tarjeta USB")) }.use { scene ->
+            File(outDir, "10-que-usa-tu-iglesia.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        }
         // El caso reportado: ventana de proyección de ~1180x630 con palabras largas al final.
         val reported = PresentationState("A", listOf(Slide("Pregón 3", "Con la fe en Jesucristo tengo el poder\nUn poder como ninguno, tesoro invaluable")), 0)
         ImageComposeScene(1180, 630, Density(1.25f)) { ProjectorScreen(reported, look = Look(Theme(builtin = null))) }.use { scene ->

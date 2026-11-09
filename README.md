@@ -140,6 +140,18 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Letra automática con el click**: con el click andando, "● Grabar tiempos" anota en qué tiempo cambia cada estrofa
   (línea `Tiempos:` en la canción). Desde ahí la letra pasa sola, medio tiempo antes; si el operador toca algo a mano
   se pausa ("▶ Retomar" vuelve a seguir la música).
+- **"¿Qué usa tu iglesia?"** (botón arriba): interruptores para el click, las secuencias, las partituras, los acordes y
+  la letra en el celular de la congregación. Lo apagado no aparece ni en el PC ni en la app. Letra y Biblia van siempre.
+- **Modo músico en la app**: al conectarse, la app pregunta "¿Quién usa este celular?". El músico (sin clave) ve la
+  canción en pantalla con **su partitura**, **los acordes** (y cambia el tono solo para él) o la letra, más el pulso y
+  el click; todo sigue solo al operador. Si quiere iniciar el click o la secuencia, se le pide la clave.
+- **Partituras** (`Selah/partituras/`): un PDF por canción e instrumento, `Cuán grande es Él - Bajo.pdf` (o una carpeta
+  por canción con `Bajo.pdf`, `Teclado.pdf`…); sin instrumento es para todos. Cada músico elige "Toco: Bajo" una vez.
+- **Secuencias** (`Selah/secuencias/`): el audio de la canción en MP3 o WAV con el mismo nombre (`Cuán grande es Él.mp3`).
+  "▶ Secuencia" la reproduce en el PC (elige la salida de sonido) y la letra la sigue con `Tiempos:` (se graban una vez
+  con "● Grabar tiempos" mientras suena). Con `BPM:` también hay click en los celulares y, si se quiere, **click a la
+  izquierda y música a la derecha** para mandar cada canal de la consola a un lugar distinto. Cambiar lo que está en
+  pantalla no corta la música; "■ Parar" la baja en un segundo y medio. (MP3 con mp3spi/JLayer, licencia LGPL.)
 - **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
   (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
   desde la app y el control web.

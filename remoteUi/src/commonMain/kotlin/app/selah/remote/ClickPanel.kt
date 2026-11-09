@@ -49,7 +49,20 @@ import kotlin.math.floor
  * lo escucha en su celular. También la letra automática y "grabar tiempos".
  */
 @Composable
-fun ClickPanel(click: ClickState?, serverOffset: () -> Long, send: (ClientMessage) -> Unit, clockRtt: () -> Long? = { null }) {
+fun ClickPanel(
+    click: ClickState?,
+    serverOffset: () -> Long,
+    send: (ClientMessage) -> Unit,
+    clockRtt: () -> Long? = { null },
+    /** El PC tiene el click encendido (si no, solo hay secuencias). */
+    clickAllowed: Boolean = true,
+    /** La canción en pantalla tiene secuencia (y el PC tiene las secuencias encendidas). */
+    sequenceAvailable: Boolean = false,
+    /** Puede iniciar o parar (tiene la clave o no se pide); si no, [onNeedPin]. */
+    canControl: Boolean = true,
+    onNeedPin: () -> Unit = {},
+) {
+    val act: (ClientMessage) -> Unit = { m -> if (canControl) send(m) else onNeedPin() }
     var open by rememberSaveable { mutableStateOf(false) }
     var listening by rememberSaveable { mutableStateOf(false) }
     var tempo by rememberSaveable { mutableStateOf("") }
@@ -58,25 +71,30 @@ fun ClickPanel(click: ClickState?, serverOffset: () -> Long, send: (ClientMessag
     // El reloj del PC se afina con el tiempo: se le pasa al sonido de nuevo cada par de segundos.
     LaunchedEffect(click, listening) {
         while (true) {
-            player.update(if (listening) click else null, serverOffset())
+            player.update(if (listening && click?.audible != false) click else null, serverOffset())
             kotlinx.coroutines.delay(2_000)
         }
     }
 
+    if (click == null && !clickAllowed && !sequenceAvailable) return
     if (click == null && !open) {
-        TextButton({ open = true }, Modifier.fillMaxWidth()) { Text("♩ Click para los músicos") }
+        TextButton({ open = true }, Modifier.fillMaxWidth()) { Text(if (sequenceAvailable) "▶ Secuencia y click" else "♩ Click para los músicos") }
         return
     }
     Card(Modifier.fillMaxWidth().padding(bottom = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (click == null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sequenceAvailable) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button({ act(ClientMessage.StartSequence) }, Modifier.weight(1f).height(56.dp)) { Text("▶ Secuencia", fontSize = 17.sp) }
+                    if (!clickAllowed) TextButton({ open = false }) { Text("✕") }
+                }
+                if (clickAllowed) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         tempo, { v -> tempo = v.filter { it.isDigit() }.take(3) },
                         label = { Text("BPM") }, placeholder = { Text("de la canción") }, singleLine = true,
                         modifier = Modifier.width(130.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
-                    Button({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).height(56.dp)) { Text("▶ Iniciar click", fontSize = 17.sp) }
+                    Button({ act(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).height(56.dp)) { Text("▶ Iniciar click", fontSize = 17.sp) }
                     TextButton({ open = false }) { Text("✕") }
                 }
                 Text(
@@ -85,22 +103,27 @@ fun ClickPanel(click: ClickState?, serverOffset: () -> Long, send: (ClientMessag
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                val sequence = click.sequence
+                if (sequence != null) Text("▶ ${sequence.substringBeforeLast('.')}", fontWeight = FontWeight.Bold, maxLines = 1)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     BeatPulse(click, serverOffset)
-                    Text("♩ ${click.bpm}", fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, softWrap = false)
+                    if (click.audible) Text("♩ ${click.bpm}", fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, softWrap = false)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(listening, { listening = !listening }, { Text(if (listening) "🎧 Sonando aquí" else "🎧 Escuchar aquí", maxLines = 1) }, Modifier.weight(1f))
-                    OutlinedButton({ send(ClientMessage.SetTempo(click.bpm - 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("−", fontSize = 18.sp) }
-                    OutlinedButton({ send(ClientMessage.SetTempo(click.bpm + 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+", fontSize = 18.sp) }
-                    Button({ send(ClientMessage.StopClick) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("■ Parar") }
+                    if (click.audible) FilterChip(listening, { listening = !listening }, { Text(if (listening) "🎧 Sonando aquí" else "🎧 Escuchar aquí", maxLines = 1) }, Modifier.weight(1f))
+                    else Text("Sin BPM: la secuencia no tiene click", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (sequence == null) {
+                        OutlinedButton({ act(ClientMessage.SetTempo(click.bpm - 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("−", fontSize = 18.sp) }
+                        OutlinedButton({ act(ClientMessage.SetTempo(click.bpm + 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+", fontSize = 18.sp) }
+                    }
+                    Button({ act(if (sequence != null) ClientMessage.StopSequence else ClientMessage.StopClick) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("■ Parar") }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
-                        click.recording -> Button({ send(ClientMessage.RecordTiming(false)) }) { Text("● Grabando · Terminar") }
-                        click.hasTiming && click.auto -> TextButton({ send(ClientMessage.SetAutoLyrics(false)) }) { Text("Letra automática ✓ · Pausar") }
-                        click.hasTiming -> Button({ send(ClientMessage.SetAutoLyrics(true)) }) { Text("▶ Retomar letra automática") }
-                        else -> TextButton({ send(ClientMessage.RecordTiming(true)) }) { Text("● Grabar tiempos") }
+                        click.recording -> Button({ act(ClientMessage.RecordTiming(false)) }) { Text("● Grabando · Terminar") }
+                        click.hasTiming && click.auto -> TextButton({ act(ClientMessage.SetAutoLyrics(false)) }) { Text("Letra automática ✓ · Pausar") }
+                        click.hasTiming -> Button({ act(ClientMessage.SetAutoLyrics(true)) }) { Text("▶ Retomar letra automática") }
+                        else -> TextButton({ act(ClientMessage.RecordTiming(true)) }) { Text("● Grabar tiempos") }
                     }
                 }
                 // Qué tan bien está sincronizado este celular con el PC (la mitad de la ida y vuelta más corta).
@@ -133,6 +156,11 @@ private fun androidx.compose.foundation.layout.RowScope.BeatPulse(click: ClickSt
     val glow = (1.0 - phase * 3).coerceIn(0.0, 1.0).toFloat()
     val color = if (down) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     Box(Modifier.size(28.dp).clip(CircleShape).background(color.copy(alpha = 0.15f + 0.85f * glow)))
-    val label = if (whole < 0) "Cuenta ${click.countIn + whole + 1}" else click.barAndBeat(whole).let { (bar, b) -> "Compás $bar · $b" }
+    val label = when {
+        // Sin BPM se cuentan segundos: "1:23".
+        !click.audible -> whole.coerceAtLeast(0).let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
+        whole < 0 -> "Cuenta ${click.countIn + whole + 1}"
+        else -> click.barAndBeat(whole).let { (bar, b) -> "Compás $bar · $b" }
+    }
     Text(label, Modifier.weight(1f), fontSize = 17.sp, color = if (whole < 0) MaterialTheme.colorScheme.tertiary else Color.Unspecified)
 }

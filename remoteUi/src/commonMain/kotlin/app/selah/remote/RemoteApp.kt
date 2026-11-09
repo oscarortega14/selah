@@ -69,6 +69,7 @@ import androidx.compose.material3.TextButton
 internal fun RemoteApp(
     client: RemoteClient, savedHost: String, pcName: String, linkKey: String?, onConnect: (FoundServer) -> Unit,
     topBanner: @Composable () -> Unit,
+    store: KeyValueStore? = null,
 ) {
     val status by client.status.collectAsState()
     val state by client.state.collectAsState()
@@ -88,6 +89,12 @@ internal fun RemoteApp(
     val bibleResults by client.bibleResults.collectAsState()
     val bibleBooks by client.bibleBooks.collectAsState()
     val bibleChapter by client.bibleChapter.collectAsState()
+    val scores by client.scores.collectAsState()
+    val sequences by client.sequences.collectAsState()
+    // Quién usa este celular: "operador" (controla todo) o "musico" (ve lo suyo); null = todavía no eligió.
+    var role by remember { mutableStateOf(store?.get("rol")) }
+    var instrument by remember { mutableStateOf(store?.get("instrumento")?.ifEmpty { null }) }
+    val setRole: (String) -> Unit = { r -> role = r; store?.put("rol" to r) }
     // Dónde quedó el explorador de la Biblia (se conserva al cambiar de pestaña).
     var bibleNav by rememberSaveable(stateSaver = BibleNav.Saver) { mutableStateOf(BibleNav()) }
     var editingHost by rememberSaveable { mutableStateOf(savedHost.isEmpty()) }
@@ -117,10 +124,17 @@ internal fun RemoteApp(
         val auth by client.auth.collectAsState()
         var pinDismissed by remember(auth) { mutableStateOf(false) }
         val needsPin = auth?.let { it.required && !it.ok } == true
-        if (needsPin && !editingHost && !pinDismissed) {
-            PinDialog(pcName, auth?.message, onDismiss = { pinDismissed = true }) { client.login(it) }
+        val musicians = hasMusicianFeatures(features) && !isDemo
+        val musicianMode = musicians && role == "musico" && !editingHost
+        // El músico no necesita la clave para ver lo suyo; se le pide solo si quiere iniciar el click o la secuencia.
+        var musicianWantsPin by remember { mutableStateOf(false) }
+        // Primero "¿Quién usa este celular?": a un músico no se le pide la clave de entrada.
+        val askingRole = musicians && role == null
+        if (needsPin && !editingHost && ((!musicianMode && !askingRole && !pinDismissed) || musicianWantsPin)) {
+            PinDialog(pcName, auth?.message, onDismiss = { pinDismissed = true; musicianWantsPin = false }) { client.login(it) }
         }
-        if (needsPin && !editingHost && pinDismissed) {
+        LaunchedEffect(needsPin) { if (!needsPin) musicianWantsPin = false }
+        if (needsPin && !editingHost && (pinDismissed || askingRole) && !musicianMode) {
             TextButton({ pinDismissed = false }, Modifier.fillMaxWidth()) { Text("Solo mirando · Escribir la clave para controlar") }
         }
         // Ojo: nada de "return" temprano dentro de Column (es inline y rompe la recomposición).
@@ -129,10 +143,26 @@ internal fun RemoteApp(
                 client,
                 onDemo = { client.startDemo(); tab = 0; editingHost = false },
             ) { server -> editingHost = false; onConnect(server) }
+        } else if (musicianMode) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("🎵 Modo músico", Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                TextButton({ setRole("operador"); tab = 0 }) { Text("Soy el operador") }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)) {
+                MusicianView(
+                    client, state, features, scores, sequences, instrument,
+                    onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
+                    canControl = !needsPin, onNeedPin = { musicianWantsPin = true },
+                )
+            }
         } else {
+            // El PC tiene cosas para los músicos y este celular no ha dicho quién lo usa: se pregunta una vez.
+            if (musicians && role == null) RoleChooser(onOperator = { setRole("operador") }, onMusician = { setRole("musico") })
+            val tabNames = listOf("En pantalla", "Canciones", "Biblia", "Lista", "Más") + if (musicians) listOf("Músicos") else emptyList()
+            if (tab >= tabNames.size) tab = 0
             // Desplazable: en celulares angostos las pestañas no parten las palabras.
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
-                listOf("En pantalla", "Canciones", "Biblia", "Lista", "Más").forEachIndexed { i, title ->
+                tabNames.forEachIndexed { i, title ->
                     Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, maxLines = 1, softWrap = false) })
                 }
             }
@@ -140,7 +170,11 @@ internal fun RemoteApp(
                 when (tab) {
                     0 -> {
                         // Click de los músicos: solo con un PC que lo entiende.
-                        if (app.selah.shared.FEATURE_CLICK in features) ClickPanel(state.click, { client.serverOffset }, client::send) { client.clockRtt }
+                        if (app.selah.shared.FEATURE_CLICK in features || app.selah.shared.FEATURE_SEQUENCES in features) ClickPanel(
+                            state.click, { client.serverOffset }, client::send, { client.clockRtt },
+                            clickAllowed = app.selah.shared.FEATURE_CLICK in features,
+                            sequenceAvailable = app.selah.shared.FEATURE_SEQUENCES in features && state.songId != null && !state.isBible && state.songId in sequences,
+                        )
                         LiveTab(state, client::send)
                     }
                     1 -> SongsTab(songs, songResults, repeatDays, onSearch = { q -> client.send(ClientMessage.SongSearch(q)) }, onAdd = { id -> client.send(ClientMessage.PlanAddSong(id)) }) { id ->
@@ -168,9 +202,14 @@ internal fun RemoteApp(
                         onUpload = client::uploadAnnouncement,
                         carouselAvailable = app.selah.shared.FEATURE_CAROUSEL in features,
                     ) { tab = 0 }
+                    5 -> MusicianView(
+                        client, state, features, scores, sequences, instrument,
+                        onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
+                        canControl = !needsPin, onNeedPin = { pinDismissed = false },
+                    )
                 }
             }
-            Controls(state, client::send)
+            if (tab != 5) Controls(state, client::send)
         }
     }
 }
@@ -685,3 +724,21 @@ private fun DemoBanner(found: FoundServer?, onConnect: (FoundServer) -> Unit) {
 
 /** Página de Selah: qué es y cómo instalarlo en el computador. */
 internal const val SELAH_WEB = "https://oortega14.com/apps/selah"
+
+/** "¿Quién usa este celular?": se pregunta una vez cuando el PC tiene cosas para los músicos. */
+@Composable
+private fun RoleChooser(onOperator: () -> Unit, onMusician: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("¿Quién usa este celular?", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "El músico ve su partitura, los acordes y el click de la canción en pantalla, sin poder cambiar la proyección.",
+                fontSize = 14.sp,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onMusician, Modifier.weight(1f)) { Text("🎵 Soy músico") }
+                OutlinedButton(onOperator, Modifier.weight(1f)) { Text("Soy el operador") }
+            }
+        }
+    }
+}

@@ -14,6 +14,7 @@ import app.selah.shared.decodeServerMessage
 import app.selah.shared.encode
 import io.ktor.client.HttpClient
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.client.request.get
 import io.ktor.client.request.setBody
 import io.ktor.client.request.header
@@ -119,6 +120,12 @@ class RemoteClient(private val scope: CoroutineScope) {
     val today: StateFlow<Pair<String, String?>> = _today.asStateFlow()
 
     /** Presentaciones (PowerPoint y PDF) del computador. */
+    /** Partituras por canción e instrumento, y canciones con secuencia (lo que el PC tenga encendido). */
+    private val _scores = MutableStateFlow<List<app.selah.shared.ScoreRef>>(emptyList())
+    val scores: StateFlow<List<app.selah.shared.ScoreRef>> = _scores.asStateFlow()
+    private val _sequences = MutableStateFlow<List<String>>(emptyList())
+    val sequences: StateFlow<List<String>> = _sequences.asStateFlow()
+
     private val _presentations = MutableStateFlow<List<String>>(emptyList())
     val presentations: StateFlow<List<String>> = _presentations.asStateFlow()
 
@@ -198,6 +205,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _bibleChapter.value = null; _bibleResults.value = null; _songResults.value = null
         _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
         _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
+        _scores.value = emptyList(); _sequences.value = emptyList()
         _plan.value = ServicePlanState(); _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
         _auth.value = null
         clock.reset()
@@ -309,6 +317,24 @@ class RemoteClient(private val scope: CoroutineScope) {
         }.getOrElse { "No se pudo subir: ${it.message}" }
     }
 
+    /** Cuántas páginas tiene una partitura (el PC la convierte si hace falta), o null si no se pudo. */
+    suspend fun scorePageCount(file: String): Int? {
+        val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return null
+        return runCatching {
+            val text = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura/paginas") { url { parameters.append("nombre", file) } }.bodyAsText()
+            Regex(""""paginas"\s*:\s*(\d+)""").find(text)?.groupValues?.get(1)?.toInt()
+        }.getOrNull()
+    }
+
+    /** Imagen (PNG) de la página [n] de una partitura, o null. */
+    suspend fun scorePage(file: String, n: Int): ByteArray? {
+        val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return null
+        return runCatching {
+            val r = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura") { url { parameters.append("nombre", file); parameters.append("n", n.toString()) } }
+            if (r.status.value == 200) r.readRawBytes() else null
+        }.getOrNull()
+    }
+
     fun clearBibleResults() { _bibleResults.value = null }
 
     fun send(msg: ClientMessage) {
@@ -326,6 +352,8 @@ class RemoteClient(private val scope: CoroutineScope) {
                 _presentations.value = m.presentations
                 _features.value = m.features
                 _repeatDays.value = m.repeatDays
+                _scores.value = m.scores
+                _sequences.value = m.sequences
                 _sermons.value = m.sermons
                 _bibleNames.value = m.bibleNames
                 _secondBible.value = m.secondBible
