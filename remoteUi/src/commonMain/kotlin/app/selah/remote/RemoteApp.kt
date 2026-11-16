@@ -152,7 +152,7 @@ internal fun RemoteApp(
                 MusicianView(
                     client, state, features, scores, sequences, instrument,
                     onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
-                    canControl = !needsPin, onNeedPin = { musicianWantsPin = true },
+                    canControl = !needsPin, onNeedPin = { musicianWantsPin = true }, prefs = store,
                 )
             }
         } else {
@@ -205,7 +205,7 @@ internal fun RemoteApp(
                     5 -> MusicianView(
                         client, state, features, scores, sequences, instrument,
                         onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
-                        canControl = !needsPin, onNeedPin = { pinDismissed = false },
+                        canControl = !needsPin, onNeedPin = { pinDismissed = false }, prefs = store,
                     )
                 }
             }

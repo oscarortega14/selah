@@ -149,7 +149,7 @@ class Presenter(
         val beats = song.beatsPerBar ?: 4
         // Tempo: el de la canción ("BPM:"), si no el del nombre del audio o el que se midió en su click.
         // Si el audio trae su propio click manda ese (lo que la banda ya oye en los audífonos).
-        val knownBpm = if (src.clickLeft) src.bpm else song.bpm ?: src.bpm
+        val knownBpm = MusicLibrary.sequenceBpm(song.bpm, src)
         // Si el audio ya trae el click a la izquierda, se reproduce tal cual (mezclarlo lo mandaría a los parlantes).
         val split = !following && opts.splitClick && knownBpm != null && !src.clickLeft
         val countIn = if (split) beats else 0
@@ -162,7 +162,7 @@ class Presenter(
         val gen = ++sequenceGen
         sequenceSongId = song.id
         val start = clock() + (if (following) 0 else SEQUENCE_LEAD_MS) + Math.round(countIn * 60_000.0 / bpm) + sequenceOffsetMs
-        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null, following = following)) }
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null, following = following, suggested = hasTiming && song.timingSuggested)) }
         sequenceOut = out
         val plan = SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice, src.durationMs)
         val listener = object : SequenceOutput.Listener {
@@ -249,7 +249,7 @@ class Presenter(
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         // Un compás de cuenta, y un momento para que la orden llegue a todos los celulares antes.
         val start = clock() + CLICK_LEAD_MS + Math.round(beats * 60_000.0 / bpm)
-        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn = beats, auto = hasTiming, hasTiming = hasTiming)) }
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn = beats, auto = hasTiming, hasTiming = hasTiming, suggested = hasTiming && song?.timingSuggested == true)) }
         return null
     }
 
@@ -302,7 +302,7 @@ class Presenter(
         }
         val error = runCatching { library.setSongTiming(id, timing); null }.getOrElse { "No pude guardar los tiempos: ${it.message}" }
         if (error == null) clickTiming = timing
-        _state.update { it.copy(click = c.copy(recording = false, hasTiming = error == null || c.hasTiming)) }
+        _state.update { it.copy(click = c.copy(recording = false, hasTiming = error == null || c.hasTiming, suggested = if (error == null) false else c.suggested)) }
         return error
     }
 

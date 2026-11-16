@@ -152,6 +152,17 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   con "● Grabar tiempos" mientras suena). Con `BPM:` también hay click en los celulares y, si se quiere, **click a la
   izquierda y música a la derecha** para mandar cada canal de la consola a un lugar distinto. Cambiar lo que está en
   pantalla no corta la música; "■ Parar" la baja en un segundo y medio. (MP3 con mp3spi/JLayer, licencia LGPL.)
+- **Secuencias que suenan en otro aparato** (otro computador, celular, consola): en "¿Qué usa tu iglesia?" →
+  "En otro aparato: Selah solo la sigue". Con "▶ Secuencia" (en el PC o el celular del director) Selah lleva el tiempo
+  sin sonar; la letra y las partituras van solas, y "◀ Antes / Después ▶" corrige si se adelantan o atrasan. Con
+  **"Escuchar el click"** (el click entra por una entrada de audio del PC) arranca solo al oírlo y se mantiene alineado.
+- **Tiempos con la voz guía**: "Sugerir tiempos" escucha la guía de cada secuencia ("Verso… 1, 2, 3, 4", "Coro",
+  "Repetir", "Final") y propone el orden de las secciones y cuándo pasa cada diapositiva (líneas `Orden:`, `Tiempos:`
+  y `Tiempos sugeridos: sí`; el orden anterior queda en `Orden sin secuencia:` para "Deshacer"). Se revisan en un
+  ensayo y, si algo va mal, "● Grabar tiempos" lo corrige. Usa Vosk (reconocimiento de voz sin internet, Apache 2.0);
+  el modelo en español (40 MB) se descarga la primera vez en `Selah/modelos`.
+- **Partituras que pasan solas**: en el celular del músico la página sigue a la letra; si una página va antes o
+  después, se desliza a la correcta una vez y el celular lo recuerda para esa partitura.
 - **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
   (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
   desde la app y el control web.

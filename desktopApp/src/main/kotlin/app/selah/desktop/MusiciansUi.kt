@@ -37,6 +37,7 @@ import androidx.compose.ui.window.Window
 import app.selah.shared.GENERAL_INSTRUMENT
 import app.selah.shared.search
 import java.io.File
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /** Lo que la ventana de operador necesita saber de los músicos (lo da Main). */
@@ -51,6 +52,11 @@ data class Musicians(
     val songs: List<app.selah.shared.SongSummary> = emptyList(),
     /** Elegir el audio de una canción (archivo, "ninguna", o null = el que coincida). Devuelve un error o null. */
     val chooseSequence: (songId: String, value: String?) -> String? = { _, _ -> null },
+    /** Sugerir tiempos con la voz guía (null = no disponible). */
+    val guide: GuideTimings? = null,
+    /** Canciones con tiempos sugeridos que nadie ha revisado (ids). */
+    val suggested: List<String> = emptyList(),
+    val undoSuggestion: (songId: String) -> String? = { null },
 ) {
     fun hasSequence(songId: String?): Boolean = church.sequences && songId != null && songId in catalog.sequences
 }
@@ -207,6 +213,8 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
         )
     }
 
+    GuideSection(m)
+
     // Las dudosas primero: se parecen a una canción solo por el comienzo del nombre.
     var dismissed by remember { mutableStateOf(setOf<String>()) }
     val doubtful = cat.toConfirm.filter { it.file !in dismissed }
@@ -246,6 +254,50 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
     if (orphans.isNotEmpty()) {
         Text("Sin canción (${orphans.size}): asígnalos a mano, o agrega la canción a la biblioteca", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
         orphans.forEach { f -> AssignRow(f, m.songs) { id -> choose(id, f) } }
+    }
+}
+
+/** Proponer los tiempos de la letra con la voz guía de las secuencias, y revisarlos. */
+@Composable
+private fun GuideSection(m: Musicians) {
+    val guide = m.guide ?: return
+    var status by remember { mutableStateOf<String?>(null) }
+    var running by remember { mutableStateOf(false) }
+    var results by remember { mutableStateOf<List<GuideTimings.Result>>(emptyList()) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val pending = remember(m.catalog, m.suggested) { guide.pending() }
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Tiempos con la voz guía", fontWeight = FontWeight.Bold)
+            Text(
+                "Selah escucha la voz guía de cada secuencia («Verso… 1, 2, 3, 4», «Coro», «Repetir», «Final») y propone el orden de " +
+                    "las secciones y cuándo cambia cada diapositiva. Revísalo en un ensayo: si algo va mal, «● Grabar tiempos» lo corrige " +
+                    "(y «Deshacer» vuelve todo como estaba). La primera vez descarga el reconocimiento de voz (40 MB).",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            androidx.compose.material3.Button({
+                running = true; results = emptyList()
+                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { guide.run(pending) { s -> status = s } }
+                        .onSuccess { r -> results = r; status = "Listo: ${r.count { it.ok }} de ${r.size} con tiempos sugeridos. Revísalas en un ensayo." }
+                        .onFailure { status = it.message ?: "No se pudo" }
+                    running = false
+                }
+            }, Modifier.hand(), enabled = !running && pending.isNotEmpty()) {
+                Text(if (pending.isEmpty()) "Todas las canciones con secuencia ya tienen tiempos" else "Sugerir tiempos (${pending.size} canciones sin tiempos)")
+            }
+            status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+            results.filter { !it.ok }.forEach { Text("✗ ${it.title}: ${it.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            if (m.suggested.isNotEmpty()) {
+                Text("Sugeridas, sin revisar (${m.suggested.size}):", fontWeight = FontWeight.Bold)
+                m.suggested.forEach { id ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("• ${m.songTitle(id)}", Modifier.weight(1f))
+                        TextButton({ status = m.undoSuggestion(id) }, Modifier.hand()) { Text("Deshacer") }
+                    }
+                }
+            }
+        }
     }
 }
 

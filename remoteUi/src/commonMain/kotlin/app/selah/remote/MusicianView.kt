@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -85,6 +86,8 @@ fun MusicianView(
     onInstrument: (String?) -> Unit,
     canControl: Boolean,
     onNeedPin: () -> Unit,
+    /** Preferencias del teléfono: dónde empieza cada página de cada partitura (lo que corrigió el músico). */
+    prefs: KeyValueStore? = null,
 ) {
     val songId = state.songId?.takeIf { !state.isBible && !state.sermon && state.media == null && state.presentation == null }
     val score = songId?.let { scoreFor(scores, it, instrument) }
@@ -122,7 +125,10 @@ fun MusicianView(
             }
         }
         when (view) {
-            MusicView.SCORE -> ScoreView(client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null)
+            MusicView.SCORE -> ScoreView(
+                client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null,
+                index = state.index, slideCount = state.slides.size, prefs = prefs,
+            )
             MusicView.CHORDS -> ChordsView(state, transpose[songId] ?: 0) { songId?.let { id -> transpose[id] = it } }
             MusicView.LYRICS -> LyricsView(state)
         }
@@ -130,7 +136,7 @@ fun MusicianView(
 }
 
 @Composable
-private fun ScoreView(client: RemoteClient, file: String, note: String?) {
+private fun ScoreView(client: RemoteClient, file: String, note: String?, index: Int, slideCount: Int, prefs: KeyValueStore?) {
     // Páginas que van llegando (la primera se ve sin esperar las demás).
     val pages by produceState<List<ImageBitmap>?>(null, file) {
         value = null
@@ -145,10 +151,40 @@ private fun ScoreView(client: RemoteClient, file: String, note: String?) {
         if (loaded.isEmpty()) value = emptyList()
     }
     var zoom by rememberSaveable { mutableStateOf(1f) }
+    // Pasar las páginas solas con la letra (y lo que el músico corrigió para esta partitura).
+    var autoPages by remember { mutableStateOf(prefs?.get("paginasSolas") != "no") }
+    var marks by remember(file) { mutableStateOf(parsePageMarks(prefs?.get("paginas:$file"))) }
+    val listState = rememberLazyListState()
+    val pageCount = pages?.size ?: 0
+    LaunchedEffect(index, pageCount, autoPages) {
+        if (autoPages && pageCount > 1 && index >= 0) {
+            val target = pageFor(index, slideCount, pageCount, marks)
+            if (listState.firstVisibleItemIndex != target) listState.animateScrollToItem(target)
+        }
+    }
+    // El músico deslizó a mano: esa página es la de esta diapositiva (se recuerda en este celular).
+    val dragged by listState.interactionSource.collectIsDraggedAsState()
+    var everDragged by remember(file) { mutableStateOf(false) }
+    LaunchedEffect(dragged) {
+        if (dragged) { everDragged = true; return@LaunchedEffect }
+        // Solo después de que el músico deslizó (no al abrir ni cuando la página pasa sola).
+        if (everDragged && autoPages && index >= 0 && pageCount > 1) {
+            kotlinx.coroutines.delay(400)
+            val page = listState.firstVisibleItemIndex
+            if (page != pageFor(index, slideCount, pageCount, marks)) {
+                marks = marks + (index to page)
+                prefs?.put("paginas:$file" to marks.entries.joinToString(",") { "${it.key}:${it.value}" })
+            }
+        }
+    }
     note?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Tamaño:", color = MaterialTheme.colorScheme.onSurfaceVariant)
         listOf(1f to "Normal", 1.5f to "Grande", 2f to "Muy grande").forEach { (z, label) -> FilterChip(zoom == z, { zoom = z }, { Text(label) }) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FilterChip(autoPages, { autoPages = !autoPages; prefs?.put("paginasSolas" to if (autoPages) "si" else "no") }, { Text("Pasar páginas solo") })
+        if (marks.isNotEmpty()) TextButton({ marks = emptyMap(); prefs?.put("paginas:$file" to "") }) { Text("Olvidar mis correcciones") }
     }
     val list = pages
     when {
@@ -160,7 +196,7 @@ private fun ScoreView(client: RemoteClient, file: String, note: String?) {
         else -> BoxWithConstraints(Modifier.fillMaxSize()) {
             val width = maxWidth * zoom
             androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
-                LazyColumn(Modifier.width(width), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyColumn(Modifier.width(width), state = listState, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(list) { img ->
                         Image(img, "Página de la partitura", Modifier.width(width).background(Color.White), contentScale = ContentScale.FillWidth)
                     }
@@ -222,3 +258,19 @@ private fun SlideList(state: PresentationState, content: @Composable (app.selah.
 
 /** Más páginas no tiene una partitura de una canción (y cada una ocupa memoria en el celular). */
 private const val MAX_SCORE_PAGES = 30
+
+/**
+ * Qué página de la partitura va con la diapositiva [index]: la que el músico marcó para esa diapositiva o una
+ * anterior; si no marcó nada, en proporción (a la mitad de la canción, la mitad de las páginas).
+ */
+fun pageFor(index: Int, slideCount: Int, pageCount: Int, marks: Map<Int, Int>): Int {
+    if (pageCount <= 1 || index < 0) return 0
+    marks.filterKeys { it <= index }.maxByOrNull { it.key }?.let { return it.value.coerceIn(0, pageCount - 1) }
+    return (index.toLong() * pageCount / slideCount.coerceAtLeast(1)).toInt().coerceIn(0, pageCount - 1)
+}
+
+/** "3:1,8:2" → {3=1, 8=2} (diapositiva → página). */
+fun parsePageMarks(text: String?): Map<Int, Int> = text.orEmpty().split(',').mapNotNull { p ->
+    val (a, b) = p.split(':').takeIf { it.size == 2 } ?: return@mapNotNull null
+    (a.trim().toIntOrNull() ?: return@mapNotNull null) to (b.trim().toIntOrNull() ?: return@mapNotNull null)
+}.toMap()

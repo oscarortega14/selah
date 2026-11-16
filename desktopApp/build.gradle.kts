@@ -44,6 +44,8 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.15.0")
     // Secuencias en MP3: decodificador puro Java (Java ya lee WAV)
     implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
+    // Voz guía de las secuencias ("Coro", "Verso"…) → tiempos sugeridos: reconocimiento de voz sin internet
+    implementation("com.alphacephei:vosk:0.3.45")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-client-cio:$ktor")
@@ -163,6 +165,9 @@ compose.desktop {
 if (System.getProperty("os.name").startsWith("Windows")) {
     tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(prepareVlc) }
 }
+
+// Pruebas con la voz guía en una Mac: la librería de Vosk para Mac que trae el paquete es vieja; se puede indicar otra.
+tasks.withType<Test>().configureEach { System.getenv("SELAH_VOSK_LIB")?.let { systemProperty("jna.library.path", it) } }
 
 // En Windows las pruebas usan el mismo VLC incluido que la app empaquetada.
 if (System.getProperty("os.name").startsWith("Windows")) {

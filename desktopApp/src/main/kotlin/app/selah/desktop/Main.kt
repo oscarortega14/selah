@@ -62,6 +62,7 @@ fun main() {
     val refreshMusic = { music.refresh(library.catalog.value.songs) { id -> library.song(id)?.sequence } }
     refreshMusic()
     commands.church = { settingsStore.value.church }
+    val guideTimings = GuideTimings(library, music, VoiceModel(baseDir))
     presenter.sequences = SequenceHookup(
         sourceFor = { id -> if (settingsStore.value.church.sequences) music.sourceFor(id) else null },
         output = JavaSoundSequenceOutput(),
@@ -208,6 +209,9 @@ fun main() {
                     chooseSequence = { id, value ->
                         runCatching { library.setSongSequence(id, value); refreshMusic(); null }.getOrElse { it.message ?: "No pude guardarlo" }
                     },
+                    guide = guideTimings,
+                    suggested = remember(catalog) { catalog.songs.filter { library.song(it.id)?.timingSuggested == true }.map { it.id } },
+                    undoSuggestion = { id -> runCatching { library.undoSuggestion(id); null }.getOrElse { it.message ?: "No pude deshacerlo" } },
                 )
                 androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship, LocalMusicians provides musicians) {
                 OperatorScreen(

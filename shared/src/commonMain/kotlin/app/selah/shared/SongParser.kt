@@ -40,6 +40,10 @@ object SongParser {
     private val METER_LINE = Regex("""^comp[aá]s\s*:\s*(\d{1,2})\s*/\s*(\d{1,2})\s*$""", RegexOption.IGNORE_CASE)
     private val TIMING_LINE = Regex("""^tiempos\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val SEQUENCE_LINE = Regex("""^secuencia\s*:(.*)$""", RegexOption.IGNORE_CASE)
+    /** "Tiempos sugeridos: sí": los Tiempos (y el Orden) los propuso Selah con la voz guía; falta revisarlos. */
+    private val SUGGESTED_LINE = Regex("""^tiempos\s+sugeridos\s*:(.*)$""", RegexOption.IGNORE_CASE)
+    /** "Orden sin secuencia: …": el Orden que tenía antes de la sugerencia (para deshacerla). */
+    private val OLD_ORDER_LINE = Regex("""^orden\s+sin\s+secuencia\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val TYPE_LINE = Regex("""^tipos?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val AUTHOR_LINE = Regex("""^autor(?:es)?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val CCLI_LINE = Regex("""^ccli\s*(?:#|n[ºo°.]*)?\s*:?\s*(\d{1,10})\s*$""", RegexOption.IGNORE_CASE)
@@ -62,6 +66,7 @@ object SongParser {
         var beatsPerBar: Int? = null
         var timing: List<Int>? = null
         var sequence: String? = null
+        var suggested = false
 
         for (raw in text.removePrefix("﻿").replace("\r\n", "\n").replace('\r', '\n').split('\n')) {
             val line = raw.trim()
@@ -99,6 +104,8 @@ object SongParser {
                     .map { it.trim().toIntOrNull()?.takeIf { n -> n in 0..100_000 } ?: -1 }
                 continue
             }
+            if (beforeLyrics && SUGGESTED_LINE.matches(line)) { suggested = SUGGESTED_LINE.matchEntire(line)!!.groupValues[1].trim().lowercase().let { it.startsWith("s") }; continue }
+            if (beforeLyrics && OLD_ORDER_LINE.matches(line)) continue
             if (beforeLyrics && sequence == null) SEQUENCE_LINE.matchEntire(line)?.let { m ->
                 sequence = m.groupValues[1].trim()
                 continue
@@ -134,6 +141,7 @@ object SongParser {
         return song.copy(
             background = background, author = author, ccli = ccli, tags = tags.orEmpty(),
             bpm = bpm, beatsPerBar = beatsPerBar, timing = timing.orEmpty(), sequence = sequence?.ifEmpty { null },
+            timingSuggested = suggested && !timing.isNullOrEmpty(),
         )
     }
 

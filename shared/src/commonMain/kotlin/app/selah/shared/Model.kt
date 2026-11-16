@@ -138,6 +138,8 @@ data class ClickState(
     val following: Boolean = false,
     /** Esperando oír el click de la secuencia (por la entrada de audio del PC) para arrancar. */
     val waiting: Boolean = false,
+    /** Los tiempos de la letra los sugirió Selah (voz guía): hay que revisarlos. */
+    val suggested: Boolean = false,
 ) {
     val beatMs: Double get() = 60_000.0 / bpm
 
@@ -194,6 +196,8 @@ data class Song(
     val timing: List<Int> = emptyList(),
     /** Línea "Secuencia:": el audio elegido de la carpeta secuencias ("ninguna" = ninguno); null = el que coincida. */
     val sequence: String? = null,
+    /** Los Tiempos los propuso Selah con la voz guía de la secuencia y nadie los ha revisado. */
+    val timingSuggested: Boolean = false,
 ) {
     fun summary() = SongSummary(id, title, slides.firstOrNull()?.text?.lineSequence()?.firstOrNull().orEmpty(), tags)
 }

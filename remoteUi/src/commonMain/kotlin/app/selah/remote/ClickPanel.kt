@@ -127,7 +127,7 @@ fun ClickPanel(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
                         click.recording -> Button({ act(ClientMessage.RecordTiming(false)) }) { Text("● Grabando · Terminar") }
-                        click.hasTiming && click.auto -> TextButton({ act(ClientMessage.SetAutoLyrics(false)) }) { Text("Letra automática ✓ · Pausar") }
+                        click.hasTiming && click.auto -> TextButton({ act(ClientMessage.SetAutoLyrics(false)) }) { Text(if (click.suggested) "Letra automática (sugerida) ✓ · Pausar" else "Letra automática ✓ · Pausar") }
                         click.hasTiming -> Button({ act(ClientMessage.SetAutoLyrics(true)) }) { Text("▶ Retomar letra automática") }
                         else -> TextButton({ act(ClientMessage.RecordTiming(true)) }) { Text("● Grabar tiempos") }
                     }

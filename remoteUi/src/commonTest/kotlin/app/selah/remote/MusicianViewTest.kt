@@ -39,4 +39,16 @@ class MusicianViewTest {
         val new = ServerMessage.Library(listOf(SongSummary("a", "A")), scores = listOf(ScoreRef("a", "Bajo", "a - Bajo.pdf")), sequences = listOf("a"))
         assertEquals(new, decodeServerMessage(new.encode()))
     }
+
+    @Test
+    fun scorePagesFollowTheLyricsAndRememberCorrections() {
+        // 12 diapositivas y 3 páginas: sin correcciones, en proporción
+        assertEquals(listOf(0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2), (0 until 12).map { pageFor(it, 12, 3, emptyMap()) })
+        // El músico marcó que la página 2 (índice 1) empieza en la diapositiva 2 y la 3 en la 9
+        val marks = parsePageMarks("2:1,9:2")
+        assertEquals(mapOf(2 to 1, 9 to 2), marks)
+        assertEquals(listOf(0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2), (0 until 12).map { pageFor(it, 12, 3, marks) })
+        assertEquals(0, pageFor(5, 12, 1, marks)) // una sola página
+        assertEquals(emptyMap(), parsePageMarks("basura,1:x,"))
+    }
 }

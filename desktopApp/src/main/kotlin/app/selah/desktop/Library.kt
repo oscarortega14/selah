@@ -162,8 +162,47 @@ class Library(val baseDir: File) {
     }
 
     /** Guarda en qué tiempo empieza cada diapositiva (línea "Tiempos:", la escribe la grabación del click). */
-    fun setSongTiming(id: String, timing: List<Int>): String =
-        setHeaderLine(id, TIMING_LINE, timing.takeIf { it.isNotEmpty() }?.let { "Tiempos: " + it.joinToString(" ") })
+    /** Tiempos grabados a mano: ya no son "sugeridos". */
+    fun setSongTiming(id: String, timing: List<Int>): String = editHeader(id, listOf(
+        TIMING_LINE to timing.takeIf { it.isNotEmpty() }?.let { "Tiempos: " + it.joinToString(" ") },
+        SUGGESTED_LINE to null,
+    ))
+
+    /**
+     * Lo que Selah sugirió con la voz guía de la secuencia: el orden de las secciones y los tiempos, marcados como
+     * sugeridos. El Orden que tenía se guarda en "Orden sin secuencia:" para poder deshacerlo.
+     */
+    fun applySuggestion(id: String, order: List<String>, timing: List<Int>): String {
+        val old = headerValue(id, ORDER_EDIT_LINE)
+        val keepOld = headerValue(id, OLD_ORDER_LINE) == null
+        return editHeader(id, buildList {
+            add(SUGGESTED_LINE to "Tiempos sugeridos: sí")
+            add(TIMING_LINE to "Tiempos: " + timing.joinToString(" "))
+            add(ORDER_EDIT_LINE to "Orden: " + order.joinToString(", "))
+            if (keepOld) add(OLD_ORDER_LINE to "Orden sin secuencia: " + (old ?: "-"))
+        })
+    }
+
+    /** Deshacer la sugerencia: vuelve el Orden de antes y se quitan los tiempos. */
+    fun undoSuggestion(id: String): String {
+        val old = headerValue(id, OLD_ORDER_LINE)
+        return editHeader(id, listOf(
+            SUGGESTED_LINE to null, TIMING_LINE to null, OLD_ORDER_LINE to null,
+            ORDER_EDIT_LINE to old?.takeIf { it.isNotBlank() && it != "-" }?.let { "Orden: $it" },
+        ))
+    }
+
+    /** El valor (después de ":") de una línea del encabezado, o null si no está. */
+    private fun headerValue(id: String, line: Regex): String? {
+        val text = rawText(id) ?: return null
+        for (l in text.replace("\r\n", "\n").split('\n')) {
+            val t = l.trim()
+            if (t.isEmpty() || t.startsWith("#")) continue
+            if (HEADER_LINES.none { it.matches(t) }) return null // ya empezó la letra
+            if (line.matches(t)) return t.substringAfter(':').trim()
+        }
+        return null
+    }
 
     /** Qué audio de secuencias usa la canción ("ninguna" = ninguno; null = el que coincida por el nombre). */
     fun setSongSequence(id: String, value: String?): String =
@@ -173,16 +212,17 @@ class Library(val baseDir: File) {
      * Reemplaza (o quita, con [newLine] null) una línea del encabezado de la canción, la que cumple [line].
      * Solo en el encabezado (antes de la primera estrofa): una línea de la letra que se parezca no se toca.
      */
-    private fun setHeaderLine(id: String, line: Regex, newLine: String?): String {
+    private fun setHeaderLine(id: String, line: Regex, newLine: String?): String = editHeader(id, listOf(line to newLine))
+
+    /** Varias líneas del encabezado a la vez (una sola escritura del archivo). */
+    private fun editHeader(id: String, changes: List<Pair<Regex, String?>>): String {
         val text = rawText(id) ?: throw IllegalArgumentException("Canción no encontrada")
         val all = text.replace("\r\n", "\n").split('\n')
         val firstLyric = all.indexOfFirst { l -> val t = l.trim(); t.isNotEmpty() && !t.startsWith("#") && HEADER_LINES.none { it.matches(t) } }
             .let { if (it < 0) all.size else it }
-        val lines = all.filterIndexed { i, l -> i >= firstLyric || !line.matches(l.trim()) }.toMutableList()
-        if (newLine != null) {
-            val titleAt = lines.indexOfFirst { it.trimStart().startsWith("#") }
-            lines.add(titleAt + 1, newLine)
-        }
+        val lines = all.filterIndexed { i, l -> i >= firstLyric || changes.none { (line, _) -> line.matches(l.trim()) } }.toMutableList()
+        val titleAt = lines.indexOfFirst { it.trimStart().startsWith("#") }
+        changes.mapNotNull { it.second }.reversed().forEach { lines.add(titleAt + 1, it) }
         return save(id, lines.joinToString("\n"))
     }
 
@@ -502,8 +542,11 @@ class Library(val baseDir: File) {
         val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "bmp")
         private val TYPE_LINE = Regex("""^tipos?\s*:.*$""", RegexOption.IGNORE_CASE)
         private val TIMING_LINE = Regex("""^tiempos\s*:.*$""", RegexOption.IGNORE_CASE)
+        private val SUGGESTED_LINE = Regex("""^tiempos\s+sugeridos\s*:.*$""", RegexOption.IGNORE_CASE)
+        private val ORDER_EDIT_LINE = Regex("""^orden\s*:.*$""", RegexOption.IGNORE_CASE)
+        private val OLD_ORDER_LINE = Regex("""^orden\s+sin\s+secuencia\s*:.*$""", RegexOption.IGNORE_CASE)
         /** Líneas que van antes de la letra (no se proyectan). */
-        private val HEADER_LINES = listOf(TYPE_LINE, TIMING_LINE, Regex("""^(orden|fondo|autor(es)?|ccli|bpm|comp[aá]s|secuencia)\b.*$""", RegexOption.IGNORE_CASE))
+        private val HEADER_LINES = listOf(TYPE_LINE, TIMING_LINE, SUGGESTED_LINE, Regex("""^(orden|fondo|autor(es)?|ccli|bpm|comp[aá]s|secuencia)\b.*$""", RegexOption.IGNORE_CASE))
         private val SEQUENCE_LINE = Regex("""^secuencia\s*:.*$""", RegexOption.IGNORE_CASE)
         private val FONDO_LINE = Regex("""^fondo\s*:.*$""", RegexOption.IGNORE_CASE)
         private val FORBIDDEN = Regex("""[\\/:*?"<>|\u0000-\u001F]""")

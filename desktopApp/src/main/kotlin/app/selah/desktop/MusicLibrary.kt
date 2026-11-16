@@ -200,6 +200,12 @@ class MusicLibrary(baseDir: File) {
         /** "Secuencia: ninguna" en una canción: no usar ningún audio. */
         const val NONE = "ninguna"
         private const val ANALYSIS_VERSION = 3
+
+        /**
+         * Tempo con el que se cuentan los tiempos de la letra de una secuencia: si el audio trae su click, el medido
+         * (lo que la banda oye); si no, el "BPM:" de la canción o el del nombre. null = se cuentan segundos.
+         */
+        fun sequenceBpm(songBpm: Int?, src: SequenceSource): Int? = if (src.clickLeft) src.bpm else songBpm ?: src.bpm
         fun isSequenceFile(name: String) = name.substringAfterLast('.', "").lowercase() in SEQUENCE_EXTENSIONS && !name.startsWith(".")
     }
 }

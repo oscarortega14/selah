@@ -140,6 +140,15 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   y cobertura; la voz guía no estorba), su tempo, el desfase y si cambia de tempo (entonces los celulares no suenan).
   Con click propio, el tempo es el medido (no el del nombre). `WavReader`: WAV con bloque JUNK, 24 bits y coma flotante
   (el de Java no los abre). Reporte con secuencias reales: `SELAH_REAL_DIR=… --tests '*RealSequencesTest*'`.
+- Secuencias en otro aparato (`ChurchFeatures.sequencePlays = false`): `SilentSequenceOutput` lleva el tiempo sin sonar,
+  `ClientMessage.SequenceNudge` corre ±ms (`ClickState.following`). `ClickFollower.kt`: escucha el click por una entrada
+  de audio (`LineClickInput`), arranca al oír los 3 primeros golpes con el patrón de `AudioAnalysis.clicks` y se corrige
+  con la mediana del error (probado con el click real de Salem: 0-4 ms). `ClickState.waiting` mientras espera.
+- Tiempos con la voz guía: `GuideVoice.kt` (Vosk por JNA directo: la clase LibVosk del paquete falla en Mac porque su
+  dylib no tiene `vosk_recognizer_set_grm`; se usa `vosk_recognizer_new_grm` con lista cerrada de palabras),
+  `TimingGuess.kt` (avisos → comienzos, "repetir" repartido parejo, secciones por tipo), `GuideTimings.kt` (+ `VoiceModel`:
+  descarga con SHA-256 a `Selah/modelos`), `Library.applySuggestion/undoSuggestion`. Real: 40 de 42 canciones en 98 s.
+  Páginas de partitura que siguen la letra en el celular (`pageFor`, correcciones guardadas por partitura).
 - App: modo músico (`MusicianView.kt`, "¿Quién usa este celular?", rol e instrumento guardados en el teléfono),
   pestaña "Músicos" para el operador, `decodeImage` por plataforma. Probado en el emulador Android con Selah en la Mac
   (partitura, acordes, secuencia iniciada desde el celular, ±2 ms). Falta: probar en consola real y en iPhone.
