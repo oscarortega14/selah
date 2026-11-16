@@ -154,6 +154,9 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   deviceName)` y `Auth(role, instrument, pending)` con valores por defecto (apps viejas: la clave = operador). El servidor
   rechaza por permiso ("Tu papel (…) no permite eso"); `/partitura` pide `X-Selah-Dispositivo` o la clave. Probado en el
   emulador: esperando → músico (★ Bajo, ve el piano) → director (inicia la secuencia). Sin clave en el PC: todos operador.
+- Asistente de inicio (`SetupWizard.kt`, reemplaza a Welcome.kt): `WIZARD_STEPS` con capturas en `resources/guia/` (512 KB;
+  PC dibujado con `GuideImagesTest`, celular del emulador con canciones de ejemplo), interruptores de `ChurchFeatures`,
+  aviso al saltar si no vio `WIZARD_IMPORTANT`.
 - App: modo músico (`MusicianView.kt`, "¿Quién usa este celular?", rol e instrumento guardados en el teléfono),
   pestaña "Músicos" para el operador, `decodeImage` por plataforma. Probado en el emulador Android con Selah en la Mac
   (partitura, acordes, secuencia iniciada desde el celular, ±2 ms). Falta: probar en consola real y en iPhone.

@@ -272,7 +272,11 @@ fun main() {
                 }
                 // La primera vez: guía corta. Después del aviso del firewall, para no encimar ventanas.
                 if (!settings.welcomeDone && !askFirewall) {
-                    WelcomeDialog(onDone = { settingsStore.update { it.copy(welcomeDone = true) } })
+                    SetupWizard(
+                        settings.church,
+                        update = { f -> settingsStore.update { it.copy(church = f(it.church)) } },
+                        onDone = { settingsStore.update { it.copy(welcomeDone = true) } },
+                    )
                 }
                 if (updateOpen && offerUpdate) {
                     UpdateDialog(

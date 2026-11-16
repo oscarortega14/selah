@@ -118,6 +118,15 @@ class RolesTest {
 
                 // Quitado del equipo (y sin la clave en otra conexión): vuelve a pedir entrar
             }
+            // Un celular nuevo que trae la clave (enlace del QR): operador, no "esperando"
+            client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
+                say(ClientMessage.Hello(deviceId = "nuevo-celular-0123456789abcdef", deviceName = "Operador"))
+                until { it is ServerMessage.Auth && it.pending }
+                say(ClientMessage.Login("4321"))
+                val a = until { it is ServerMessage.Auth && it.ok } as ServerMessage.Auth
+                assertFalse(a.pending)
+                assertEquals(Role.OPERATOR, a.role)
+            }
             // Una app vieja (sin código): como antes, la clave controla todo
             client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
                 say(ClientMessage.Hello())

@@ -279,7 +279,8 @@ class RemoteServer(
                     val r = currentRole()
                     roleFlow.value = r
                     val m = team?.member(deviceHash)
-                    val waiting = deviceHash != null && m == null && team?.pending?.value?.any { it.idHash == deviceHash } == true
+                    // Con la clave ya es operador: no está "esperando" aunque su celular no esté en el equipo.
+                    val waiting = r != app.selah.shared.Role.OPERATOR && deviceHash != null && m == null && team?.pending?.value?.any { it.idHash == deviceHash } == true
                     return ServerMessage.Auth(guard.required, r == app.selah.shared.Role.OPERATOR, message, role = team?.let { r }, instrument = m?.instrument, pending = waiting)
                 }
                 // Envía biblioteca y estado al conectarse, y luego cada vez que cambien.

@@ -163,6 +163,10 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   el modelo en español (40 MB) se descarga la primera vez en `Selah/modelos`.
 - **Partituras que pasan solas**: en el celular del músico la página sigue a la letra; si una página va antes o
   después, se desliza a la correcta una vez y el celular lo recuerda para esa partitura.
+- **Asistente de la primera vez** (y en "?" → "Ver la guía de inicio"): una página por función con capturas que pasan
+  solas, y en cada función opcional "Sí, la vamos a usar" (deja configurado "¿Qué usa tu iglesia?"). "Saltar" avisa qué
+  páginas conviene ver y cómo queda si salta. Las capturas (`resources/guia/`) se rehacen con `GuideImagesTest`
+  (biblioteca de ejemplo, sin canciones de nadie) y el emulador.
 - **Equipo y papeles** (botón "Equipo"): cada celular que se conecta pide entrar y el computador principal le da su
   papel: **Operador** (todo), **Director de alabanza** (click, secuencias, letra automática, mensajes al escenario),
   **Músico** (ve su partitura sugerida ★ y las de todos, acordes, letra y click; no cambia nada), **Predicador**
