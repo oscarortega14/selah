@@ -134,6 +134,8 @@ data class ClickState(
     val sequence: String? = null,
     /** false = la secuencia no tiene BPM: no hay toc en los celulares (los tiempos cuentan segundos). */
     val audible: Boolean = true,
+    /** La secuencia suena en otro aparato y Selah solo la sigue: se puede correr un poco (SequenceNudge). */
+    val following: Boolean = false,
 ) {
     val beatMs: Double get() = 60_000.0 / bpm
 

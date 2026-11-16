@@ -169,4 +169,41 @@ class SequenceFilesTest {
         File(dir, "malo.wav").writeText("RIFF....WAVEnada")
         assertTrue(JavaSoundSequenceOutput().check(File(dir, "malo.wav"))!!.contains("MP3 o WAV"))
     }
+
+    @Test
+    fun whenItPlaysOnAnotherDeviceSelahOnlyFollowsIt() {
+        clickWav(File(music.sequencesDir, "Aclamad a Dios - 150 BMP - D .wav"), 150, firstMs = 20)
+        File(dir, "canciones/Aclamad a Dios.txt").writeText("# Aclamad a Dios\nTiempos: 0 8\n\nuno\n\ndos\n")
+        library.reload()
+        refresh()
+        val speakers = MusiciansTest.FakeOutput()
+        val silent = MusiciansTest.FakeOutput()
+        var now = 1_000_000L
+        var church = ChurchFeatures.ALL.copy(sequencePlays = false, splitClick = true)
+        val presenter = Presenter(library) { now }
+        presenter.sequences = SequenceHookup({ music.sourceFor(it) }, speakers, { church }, silent)
+        presenter.handle(ClientMessage.SelectSong("Aclamad a Dios"))
+        assertNull(presenter.handle(ClientMessage.StartSequence))
+        assertTrue(speakers.played.isEmpty()) // no suena nada en el PC
+        val plan = silent.played.single().second
+        assertFalse(plan.splitClick)
+        assertTrue(plan.durationMs in 19_900..20_100, "duración ${plan.durationMs}")
+        val c = presenter.state.value.click!!
+        assertTrue(c.following)
+        // Arranca en el momento del "▶" (más lo que tarda el primer click del audio)
+        assertTrue(abs(c.startAt - (now + 20)) <= 4)
+        // La letra va adelantada: se corre 100 ms más tarde
+        assertNull(presenter.handle(ClientMessage.SequenceNudge(100)))
+        assertEquals(c.startAt + 100, presenter.state.value.click!!.startAt)
+        // La letra sigue el tiempo igual que si sonara
+        now = presenter.state.value.click!!.startAt + 8 * 400
+        presenter.tick()
+        assertEquals(1, presenter.state.value.index)
+        // Si suena en el PC no hace falta correrla
+        presenter.handle(ClientMessage.StopSequence)
+        church = church.copy(sequencePlays = true)
+        presenter.handle(ClientMessage.StartSequence)
+        assertEquals(1, speakers.played.size)
+        assertTrue(presenter.handle(ClientMessage.SequenceNudge(100))!!.contains("no hace falta"))
+    }
 }

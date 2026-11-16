@@ -173,6 +173,13 @@ sealed interface ClientMessage {
     @Serializable @SerialName("sequence_stop")
     data object StopSequence : ClientMessage
 
+    /**
+     * La secuencia suena en otro aparato y la letra va adelantada o atrasada: correr el tiempo de Selah [ms]
+     * (positivo = Selah va más tarde). Solo con ClickState.following.
+     */
+    @Serializable @SerialName("sequence_nudge")
+    data class SequenceNudge(val ms: Int) : ClientMessage
+
     /** Para sincronizar relojes: el PC responde [ServerMessage.Pong] con su hora. Se permite sin clave. */
     @Serializable @SerialName("ping")
     data class Ping(val clientTime: Long) : ClientMessage

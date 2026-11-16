@@ -24,6 +24,10 @@ data class AudioAnalysis(
     val offsetMs: Int = 0,
     /** El click cambia de tempo en la canción: el de los celulares no lo seguiría (suena solo el del audio). */
     val tempoChanges: Boolean = false,
+    /** Lo que dura el audio (ms); 0 = no se sabe. Para seguirlo cuando suena en otro aparato. */
+    val durationMs: Long = 0,
+    /** Dónde cae cada golpe del click en toda la canción (ms): para alinearse con el click que se escucha. */
+    val clicks: List<Int> = emptyList(),
 )
 
 object SequenceAnalysis {
@@ -34,28 +38,47 @@ object SequenceAnalysis {
     fun analyze(file: File, window: Int = 40): AudioAnalysis = runCatching {
         openPcm(file).use { input ->
             val rate = input.format.sampleRate.toInt()
-            if (input.format.channels != 2) return AudioAnalysis()
-            val bytes = ByteArray(rate * window * 4)
+            val channels = input.format.channels
+            val frameBytes = channels * 2
+            val bytes = ByteArray(rate * window * frameBytes)
             var first: AudioAnalysis? = null
             var changes = false
+            var totalFrames = 0L
+            val clicks = mutableListOf<Int>()
+            var clickLeft = channels == 2
             while (true) {
                 var n = 0
                 while (n < bytes.size) { val r = input.read(bytes, n, bytes.size - n); if (r <= 0) break; n += r }
-                val frames = n / 4
-                if (frames < rate * 8) break // menos de 8 s: no alcanza para medir
-                val left = IntArray(frames) { (bytes[4 * it + 1].toInt() shl 8) or (bytes[4 * it].toInt() and 0xff) }
-                val right = IntArray(frames) { (bytes[4 * it + 3].toInt() shl 8) or (bytes[4 * it + 2].toInt() and 0xff) }
-                val a = analyze(left, right, rate)
-                if (first == null) {
-                    if (!a.clickLeft) return AudioAnalysis()
-                    first = a
-                } else if (a.clickLeft && a.bpm != null && first.bpm != null && abs(a.bpm - first.bpm) > maxOf(2, first.bpm / 30)) {
-                    changes = true
-                    break
+                val frames = n / frameBytes
+                val startMs = totalFrames * 1000 / rate
+                totalFrames += frames
+                if (frames >= rate * 8 && clickLeft) {
+                    val left = IntArray(frames) { (bytes[frameBytes * it + 1].toInt() shl 8) or (bytes[frameBytes * it].toInt() and 0xff) }
+                    val right = IntArray(frames) { (bytes[frameBytes * it + 3].toInt() shl 8) or (bytes[frameBytes * it + 2].toInt() and 0xff) }
+                    val a = analyze(left, right, rate)
+                    if (first == null) {
+                        if (!a.clickLeft) clickLeft = false else first = a
+                    } else if (a.clickLeft && a.bpm != null && first.bpm != null && abs(a.bpm - first.bpm) > maxOf(2, first.bpm / 30)) {
+                        changes = true
+                    }
+                    // Los golpes del click de este tramo (los que caen en su pulso: no la voz guía).
+                    if (clickLeft) {
+                        val on = onsets(left, rate)
+                        val grid = beatPeriod(on)?.let { fitGrid(on, it) }
+                        for (t in on) {
+                            val keep = grid == null || run {
+                                val (beat, phase) = grid
+                                val d = (t - phase).mod(beat)
+                                minOf(d, beat - d) <= maxOf(8.0, beat * 0.06)
+                            }
+                            if (keep) clicks += (startMs + t).roundToInt()
+                        }
+                    }
                 }
                 if (n < bytes.size) break
             }
-            first?.copy(tempoChanges = changes) ?: AudioAnalysis()
+            val duration = totalFrames * 1000 / rate
+            (first?.copy(tempoChanges = changes, clicks = clicks) ?: AudioAnalysis()).copy(durationMs = duration)
         }
     }.getOrElse { Log.warn("No pude analizar ${file.name}: ${it.message}"); AudioAnalysis() }
 

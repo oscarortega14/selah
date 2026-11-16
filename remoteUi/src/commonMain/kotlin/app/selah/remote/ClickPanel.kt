@@ -104,7 +104,13 @@ fun ClickPanel(
                 )
             } else {
                 val sequence = click.sequence
-                if (sequence != null) Text("▶ ${sequence.substringBeforeLast('.')}", fontWeight = FontWeight.Bold, maxLines = 1)
+                if (sequence != null) Text("▶ ${sequence.substringBeforeLast('.')}" + if (click.following) " · siguiendo" else "", fontWeight = FontWeight.Bold, maxLines = 1)
+                // La secuencia suena en otro aparato: si la letra va adelantada o atrasada, se corre un poquito.
+                if (sequence != null && click.following) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("La letra va…", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedButton({ act(ClientMessage.SequenceNudge(100)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("adelantada") }
+                    OutlinedButton({ act(ClientMessage.SequenceNudge(-100)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("atrasada") }
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     BeatPulse(click, serverOffset)
                     if (click.audible) Text("♩ ${click.bpm}", fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, softWrap = false)

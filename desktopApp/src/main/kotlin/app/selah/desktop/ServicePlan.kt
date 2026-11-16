@@ -233,7 +233,7 @@ class Commands(
         val c = church()
         return when (msg) {
             is ClientMessage.StartClick -> if (!c.click) OFF_CLICK else null
-            ClientMessage.StartSequence -> if (!c.sequences) OFF_SEQUENCES else null
+            ClientMessage.StartSequence, is ClientMessage.SequenceNudge -> if (!c.sequences) OFF_SEQUENCES else null
             is ClientMessage.SetTempo, is ClientMessage.RecordTiming, is ClientMessage.SetAutoLyrics -> if (!c.click && !c.sequences) OFF_CLICK else null
             else -> null
         }

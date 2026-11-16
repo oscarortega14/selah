@@ -64,6 +64,8 @@ data class ChurchFeatures(
     val audioDevice: String? = null,
     /** Click a la izquierda y música a la derecha (para mandar cada uno a un canal de la consola). */
     val splitClick: Boolean = false,
+    /** true = Selah reproduce la secuencia; false = suena en otro aparato y Selah solo la sigue (letra y partituras). */
+    val sequencePlays: Boolean = true,
 ) {
     companion object {
         /** Todo encendido (las pruebas y quien quiera verlo todo). */

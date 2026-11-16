@@ -22,6 +22,8 @@ data class SequencePlan(
     val splitClick: Boolean = false,
     /** Salida de sonido (nombre); null = la del sistema. */
     val device: String? = null,
+    /** Lo que dura el audio (para seguirlo sin sonar); 0 = no se sabe. */
+    val durationMs: Long = 0,
 )
 
 /** Lo que reproduce las secuencias (el real usa Java Sound; las pruebas, uno falso). */
@@ -234,4 +236,34 @@ internal fun openPcm(file: File): AudioInputStream {
     val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
     val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)
     return if (f.matches(pcm)) src else AudioSystem.getAudioInputStream(pcm, src)
+}
+
+/**
+ * Para cuando la secuencia suena en otro aparato: no suena nada, solo lleva la cuenta del tiempo (la letra y las
+ * partituras la siguen). Arranca en el momento de "▶" y termina cuando acabaría el audio.
+ */
+class SilentSequenceOutput(private val clock: () -> Long = System::currentTimeMillis) : SequenceOutput {
+    @Volatile private var current: Thread? = null
+
+    override fun check(file: File): String? = null
+
+    override fun play(file: File, plan: SequencePlan, listener: SequenceOutput.Listener) {
+        stop()
+        val start = clock()
+        listener.musicStartsAt(start)
+        val duration = plan.durationMs
+        current = Thread({
+            try {
+                // Sin duración conocida sigue hasta que la paren.
+                while (duration <= 0 || clock() < start + duration) Thread.sleep(200)
+                listener.finished(null)
+            } catch (_: InterruptedException) {
+            }
+        }, "seguir-secuencia").apply { isDaemon = true; start() }
+    }
+
+    override fun stop() {
+        current?.interrupt()
+        current = null
+    }
 }

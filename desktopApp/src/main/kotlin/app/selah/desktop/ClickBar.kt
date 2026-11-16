@@ -76,6 +76,11 @@ fun ClickBar(
                 TextButton({ send(ClientMessage.SetTempo(click.bpm + 1)) }, Modifier.hand()) { Text("+") }
                 TextButton({ send(ClientMessage.StopClick) }, Modifier.hand()) { Text("■") }
             } else {
+                // Suena en otro aparato: si la letra se adelanta o se atrasa, se corre un poquito.
+                if (click.following) {
+                    TextButton({ send(ClientMessage.SequenceNudge(-100)) }, Modifier.hand()) { Text("◀ Antes") }
+                    TextButton({ send(ClientMessage.SequenceNudge(100)) }, Modifier.hand()) { Text("Después ▶") }
+                }
                 Button({ send(ClientMessage.StopSequence) }, Modifier.hand()) { Text("■ Parar") }
             }
         }

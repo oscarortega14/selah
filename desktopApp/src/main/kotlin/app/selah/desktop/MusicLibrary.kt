@@ -51,7 +51,12 @@ data class MusicCatalog(
 }
 
 /** Lo que necesita el presentador para hacer sonar una secuencia. */
-data class SequenceSource(val file: File, val bpm: Int?, val clickLeft: Boolean, val offsetMs: Int, val tempoChanges: Boolean = false)
+data class SequenceSource(
+    val file: File, val bpm: Int?, val clickLeft: Boolean, val offsetMs: Int, val tempoChanges: Boolean = false,
+    val durationMs: Long = 0,
+    /** Golpes del click en el audio (ms), para seguir el click que se escucha por la entrada de audio. */
+    val clicks: List<Int> = emptyList(),
+)
 
 /**
  * Lo de los músicos en disco:
@@ -112,7 +117,8 @@ class MusicLibrary(baseDir: File) {
         analyzeMissingInBackground()
     }
 
-    private fun stamp(f: File) = "${f.length()}|${f.lastModified()}"
+    // Con el número de formato: si el análisis aprende algo nuevo, se vuelve a escuchar todo.
+    private fun stamp(f: File) = "${f.length()}|${f.lastModified()}|$ANALYSIS_VERSION"
 
     private fun cached(name: String): AudioAnalysis? = File(sequencesDir, name).let { f -> cache[name]?.takeIf { it.stamp == stamp(f) }?.analysis }
 
@@ -156,7 +162,7 @@ class MusicLibrary(baseDir: File) {
             a.clickLeft -> a.bpm
             else -> info?.name?.bpm
         }
-        return SequenceSource(f, bpm, a.clickLeft, if (a.clickLeft) a.offsetMs else 0, tempoChanges = a.tempoChanges)
+        return SequenceSource(f, bpm, a.clickLeft, if (a.clickLeft) a.offsetMs else 0, tempoChanges = a.tempoChanges, durationMs = a.durationMs, clicks = a.clicks)
     }
 
     /** Archivo de la secuencia de la canción [songId], si tiene. */
@@ -193,6 +199,7 @@ class MusicLibrary(baseDir: File) {
         val SEQUENCE_EXTENSIONS = setOf("mp3", "wav")
         /** "Secuencia: ninguna" en una canción: no usar ningún audio. */
         const val NONE = "ninguna"
+        private const val ANALYSIS_VERSION = 2
         fun isSequenceFile(name: String) = name.substringAfterLast('.', "").lowercase() in SEQUENCE_EXTENSIONS && !name.startsWith(".")
     }
 }

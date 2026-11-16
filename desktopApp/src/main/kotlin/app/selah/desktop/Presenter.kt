@@ -25,6 +25,8 @@ class SequenceHookup(
     val sourceFor: (songId: String) -> SequenceSource?,
     val output: SequenceOutput,
     val options: () -> ChurchFeatures,
+    /** Para cuando la secuencia suena en otro aparato: solo lleva el tiempo. */
+    val silent: SequenceOutput = SilentSequenceOutput(),
 )
 
 class Presenter(
@@ -70,6 +72,7 @@ class Presenter(
         is ClientMessage.StartClick -> if (_state.value.click?.sequence != null) "Ya suena la secuencia: el click va con ella" else startClick(msg.bpm, msg.beatsPerBar)
         ClientMessage.StopClick, ClientMessage.StopSequence -> { stopClickAndSequence(); null }
         ClientMessage.StartSequence -> startSequence()
+        is ClientMessage.SequenceNudge -> nudgeSequence(msg.ms)
         is ClientMessage.SetTempo -> if (_state.value.click?.sequence != null) "El tempo lo lleva la secuencia" else setTempo(msg.bpm)
         is ClientMessage.SetAutoLyrics -> {
             _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = msg.on && c.hasTiming && !c.recording && followsThisSong(s))) } ?: s }
@@ -104,6 +107,10 @@ class Presenter(
 
     /** Canción de la secuencia que suena (la letra automática solo vale con ella en pantalla). */
     private var sequenceSongId: String? = null
+    /** Lo que está sonando (o siguiendo) la secuencia ahora. */
+    private var sequenceOut: SequenceOutput? = null
+    /** Corrección a mano cuando la secuencia suena en otro aparato (ms). */
+    private var sequenceNudgeMs = 0L
     /** El primer tiempo del click del audio cae tantos ms después del inicio (lo que se midió). */
     private var sequenceOffsetMs = 0L
     /** Sube con cada secuencia: los avisos de una anterior se ignoran. */
@@ -114,7 +121,7 @@ class Presenter(
 
     private fun stopClickAndSequence() {
         if (_state.value.click?.recording == true) finishRecording()
-        if (_state.value.click?.sequence != null) { sequences?.output?.stop(); sequenceGen++; sequenceSongId = null }
+        if (_state.value.click?.sequence != null) { sequenceOut?.stop(); sequenceOut = null; sequenceGen++; sequenceSongId = null }
         _state.update { it.copy(click = null) }
     }
 
@@ -125,29 +132,45 @@ class Presenter(
             ?: return "Primero pon en pantalla la canción de la secuencia"
         val src = hook.sourceFor(song.id) ?: return "\"${song.title}\" no tiene secuencia: pon el audio (MP3 o WAV) en la carpeta secuencias con el nombre de la canción"
         val file = src.file
-        hook.output.check(file)?.let { return it }
-        if (s.click != null) stopClickAndSequence()
         val opts = hook.options()
+        // Suena en otro aparato: Selah no reproduce nada, solo sigue el tiempo desde este "▶".
+        val following = !opts.sequencePlays
+        val out = if (following) hook.silent else hook.output
+        out.check(file)?.let { return it }
+        if (s.click != null) stopClickAndSequence()
         val beats = song.beatsPerBar ?: 4
         // Tempo: el de la canción ("BPM:"), si no el del nombre del audio o el que se midió en su click.
         // Si el audio trae su propio click manda ese (lo que la banda ya oye en los audífonos).
         val knownBpm = if (src.clickLeft) src.bpm else song.bpm ?: src.bpm
         // Si el audio ya trae el click a la izquierda, se reproduce tal cual (mezclarlo lo mandaría a los parlantes).
-        val split = opts.splitClick && knownBpm != null && !src.clickLeft
+        val split = !following && opts.splitClick && knownBpm != null && !src.clickLeft
         val countIn = if (split) beats else 0
         sequenceOffsetMs = src.offsetMs.toLong()
+        sequenceNudgeMs = 0
         // Sin BPM no hay click: los "tiempos" de la letra automática cuentan segundos (60 por minuto).
         val bpm = knownBpm ?: 60
         clickTiming = song.timing
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         val gen = ++sequenceGen
         sequenceSongId = song.id
-        val start = clock() + SEQUENCE_LEAD_MS + Math.round(countIn * 60_000.0 / bpm) + sequenceOffsetMs
-        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null)) }
-        hook.output.play(file, SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice), object : SequenceOutput.Listener {
+        val start = clock() + (if (following) 0 else SEQUENCE_LEAD_MS) + Math.round(countIn * 60_000.0 / bpm) + sequenceOffsetMs
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null, following = following)) }
+        sequenceOut = out
+        out.play(file, SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice, src.durationMs), object : SequenceOutput.Listener {
             override fun musicStartsAt(wallMs: Long) = sequenceStartsAt(gen, wallMs)
             override fun finished(error: String?) = sequenceFinished(gen, error)
         })
+        return null
+    }
+
+    /** La secuencia suena en otro aparato y la letra va adelantada o atrasada: correr el tiempo de Selah. */
+    private fun nudgeSequence(ms: Int): String? {
+        val c = _state.value.click?.takeIf { it.sequence != null } ?: return "No hay secuencia andando"
+        if (!c.following) return "La secuencia suena en este computador: no hace falta correrla"
+        val d = ms.coerceIn(-2_000, 2_000).toLong()
+        sequenceNudgeMs += d
+        _state.update { s -> s.copy(click = c.copy(startAt = c.startAt + d)) }
+        followClick()
         return null
     }
 
@@ -157,7 +180,7 @@ class Presenter(
         _state.update { s ->
             val c = s.click?.takeIf { it.sequence != null } ?: return@update s
             // Solo si se corrió algo que se note (cada cambio se manda a todos los celulares).
-            val beat0 = wallMs + sequenceOffsetMs
+            val beat0 = wallMs + sequenceOffsetMs + sequenceNudgeMs
             if (kotlin.math.abs(c.startAt - beat0) < 4) s else s.copy(click = c.copy(startAt = beat0))
         }
     }

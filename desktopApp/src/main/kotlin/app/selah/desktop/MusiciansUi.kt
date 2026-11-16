@@ -150,6 +150,24 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
     }
     message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
 
+    // ¿Dónde suena? Si es en otro aparato, Selah solo sigue el tiempo (letra y partituras), sin sonido.
+    Text("¿Dónde suena la secuencia?", fontWeight = FontWeight.Bold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.RadioButton(c.sequencePlays, { m.update { it.copy(sequencePlays = true) } }, Modifier.hand())
+        Text("En este computador: Selah la reproduce")
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.RadioButton(!c.sequencePlays, { m.update { it.copy(sequencePlays = false) } }, Modifier.hand())
+        Column {
+            Text("En otro aparato (otro computador, celular, consola): Selah solo la sigue")
+            Text(
+                "Dale «▶ Secuencia» (aquí o en el celular del director) en el mismo momento en que arranca en el otro aparato. " +
+                    "La letra y las partituras van solas; si se adelantan o atrasan, «◀ Antes / Después ▶» las corre.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (c.sequencePlays) {
     // Salida de sonido: la tarjeta que va a la consola.
     var menu by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -174,6 +192,7 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
                 )
             }
         }
+    }
     }
     var error by remember { mutableStateOf<String?>(null) }
     val choose: (String, String?) -> Unit = { id, v -> error = m.chooseSequence(id, v) }
