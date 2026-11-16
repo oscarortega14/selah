@@ -64,6 +64,7 @@ fun ClickBar(
             val color = if (down) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
             Box(Modifier.size(18.dp).clip(CircleShape).background(color.copy(alpha = 0.15f + 0.85f * glow)))
             val where = when {
+                click.waiting -> "esperando el click…"
                 !click.audible -> sequenceClock(beat)
                 whole < 0 -> "cuenta"
                 else -> click.barAndBeat(whole).let { (b, t) -> "compás $b · $t" }

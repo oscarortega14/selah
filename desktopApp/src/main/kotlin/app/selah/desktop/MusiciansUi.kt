@@ -167,6 +167,7 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
             )
         }
     }
+    if (!c.sequencePlays) ListenSettings(m)
     if (c.sequencePlays) {
     // Salida de sonido: la tarjeta que va a la consola.
     var menu by remember { mutableStateOf(false) }
@@ -245,6 +246,41 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
     if (orphans.isNotEmpty()) {
         Text("Sin canción (${orphans.size}): asígnalos a mano, o agrega la canción a la biblioteca", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
         orphans.forEach { f -> AssignRow(f, m.songs) { id -> choose(id, f) } }
+    }
+}
+
+/** Escuchar el click por una entrada de audio: arranca y se corrige solo. */
+@Composable
+private fun ListenSettings(m: Musicians) {
+    val c = m.church
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(c.listenClick, { on -> m.update { it.copy(listenClick = on) } }, Modifier.hand())
+                Column {
+                    Text("Escuchar el click (arranca y se corrige solo)", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Conecta el click que sale del otro aparato (o un envío de la consola) a una entrada de audio de este computador. " +
+                            "Con «▶ Secuencia» Selah espera: cuando oye el click arranca solo, y mientras suena se mantiene alineado.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (c.listenClick) {
+                val inputs = remember { LineClickInput.devices() }
+                var menu by remember { mutableStateOf(false) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Entrada de audio:")
+                    Box {
+                        OutlinedButton({ menu = true }, Modifier.hand()) { Text(c.listenDevice ?: "La del sistema") }
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem({ Text("La del sistema") }, { menu = false; m.update { it.copy(listenDevice = null) } })
+                            inputs.forEach { d -> DropdownMenuItem({ Text(d) }, { menu = false; m.update { it.copy(listenDevice = d) } }) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -27,6 +27,8 @@ class SequenceHookup(
     val options: () -> ChurchFeatures,
     /** Para cuando la secuencia suena en otro aparato: solo lleva el tiempo. */
     val silent: SequenceOutput = SilentSequenceOutput(),
+    /** Por dónde escuchar el click de la secuencia que suena en otro aparato (null = no se escucha). */
+    val input: (ChurchFeatures) -> ClickInput? = { c -> if (c.listenClick) LineClickInput(c.listenDevice) else null },
 )
 
 class Presenter(
@@ -109,6 +111,8 @@ class Presenter(
     private var sequenceSongId: String? = null
     /** Lo que está sonando (o siguiendo) la secuencia ahora. */
     private var sequenceOut: SequenceOutput? = null
+    /** Escuchando el click de la secuencia que suena en otro aparato. */
+    private var sequenceInput: ClickInput? = null
     /** Corrección a mano cuando la secuencia suena en otro aparato (ms). */
     private var sequenceNudgeMs = 0L
     /** El primer tiempo del click del audio cae tantos ms después del inicio (lo que se midió). */
@@ -121,7 +125,11 @@ class Presenter(
 
     private fun stopClickAndSequence() {
         if (_state.value.click?.recording == true) finishRecording()
-        if (_state.value.click?.sequence != null) { sequenceOut?.stop(); sequenceOut = null; sequenceGen++; sequenceSongId = null }
+        if (_state.value.click?.sequence != null) {
+            sequenceOut?.stop(); sequenceOut = null
+            sequenceInput?.stop(); sequenceInput = null
+            sequenceGen++; sequenceSongId = null
+        }
         _state.update { it.copy(click = null) }
     }
 
@@ -156,10 +164,26 @@ class Presenter(
         val start = clock() + (if (following) 0 else SEQUENCE_LEAD_MS) + Math.round(countIn * 60_000.0 / bpm) + sequenceOffsetMs
         _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null, following = following)) }
         sequenceOut = out
-        out.play(file, SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice, src.durationMs), object : SequenceOutput.Listener {
+        val plan = SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice, src.durationMs)
+        val listener = object : SequenceOutput.Listener {
             override fun musicStartsAt(wallMs: Long) = sequenceStartsAt(gen, wallMs)
             override fun finished(error: String?) = sequenceFinished(gen, error)
-        })
+        }
+        // Escuchar el click: se espera a oírlo para arrancar (y luego se corrige solo).
+        val input = if (following && src.clicks.size >= 3) hook.input(opts) else null
+        if (input != null) {
+            _state.update { st -> st.click?.let { c -> st.copy(click = c.copy(waiting = true, startAt = clock() + WAITING_MS)) } ?: st }
+            val error = input.start(
+                src.clicks,
+                onAnchor = { zero -> sequenceHeard(gen, zero, anchor = true) { out.play(file, plan.copy(durationMs = (src.durationMs - (clock() - zero)).coerceAtLeast(1)), listener) } },
+                onAdjust = { zero -> sequenceHeard(gen, zero, anchor = false) {} },
+            )
+            if (error == null) { sequenceInput = input; return null }
+            // Sin entrada de audio: se sigue desde el "▶", como sin escuchar.
+            Log.warn(error)
+            _state.update { st -> st.click?.let { c -> st.copy(click = c.copy(waiting = false, startAt = start)) } ?: st }
+        }
+        out.play(file, plan, listener)
         return null
     }
 
@@ -174,9 +198,23 @@ class Presenter(
         return null
     }
 
+    /** Se oyó el click: el ms 0 del archivo sonó a la hora [fileZero] del PC. */
+    @Synchronized
+    private fun sequenceHeard(gen: Int, fileZero: Long, anchor: Boolean, then: () -> Unit) {
+        if (gen != sequenceGen) return
+        _state.update { s ->
+            val c = s.click?.takeIf { it.sequence != null } ?: return@update s
+            s.copy(click = c.copy(startAt = fileZero + sequenceOffsetMs + sequenceNudgeMs, waiting = false))
+        }
+        if (anchor) then()
+        followClick()
+    }
+
     @Synchronized
     private fun sequenceStartsAt(gen: Int, wallMs: Long) {
         if (gen != sequenceGen) return
+        // Escuchando el click, la hora la manda lo que se oye (no el reloj del "▶").
+        if (sequenceInput != null) return
         _state.update { s ->
             val c = s.click?.takeIf { it.sequence != null } ?: return@update s
             // Solo si se corrió algo que se note (cada cambio se manda a todos los celulares).
@@ -190,6 +228,7 @@ class Presenter(
         if (gen != sequenceGen) return
         if (error != null) Log.warn(error)
         if (_state.value.click?.recording == true) finishRecording()
+        sequenceInput?.stop(); sequenceInput = null; sequenceOut = null
         sequenceSongId = null
         _state.update { it.copy(click = null) }
     }
@@ -271,7 +310,7 @@ class Presenter(
     private fun followClick() {
         val s = _state.value
         val c = s.click ?: return
-        if (!c.auto || c.recording || !followsThisSong(s)) return
+        if (!c.auto || c.recording || c.waiting || !followsThisSong(s)) return
         val target = autoSlide(clickTiming, c.beatAt(clock())) ?: return
         if (target != s.index && target in s.slides.indices) _state.update { it.copy(index = target) }
     }
@@ -444,5 +483,8 @@ class Presenter(
 
         /** Lo que tarda en arrancar el audio (se corrige solo con lo que dice la tarjeta de sonido). */
         const val SEQUENCE_LEAD_MS = 300L
+
+        /** Mientras espera oír el click, el tiempo 0 queda "lejos" (nada se mueve solo). */
+        const val WAITING_MS = 3_600_000L
     }
 }

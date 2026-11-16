@@ -136,6 +136,8 @@ data class ClickState(
     val audible: Boolean = true,
     /** La secuencia suena en otro aparato y Selah solo la sigue: se puede correr un poco (SequenceNudge). */
     val following: Boolean = false,
+    /** Esperando oír el click de la secuencia (por la entrada de audio del PC) para arrancar. */
+    val waiting: Boolean = false,
 ) {
     val beatMs: Double get() = 60_000.0 / bpm
 

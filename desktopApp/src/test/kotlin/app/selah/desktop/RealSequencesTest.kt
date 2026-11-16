@@ -50,6 +50,25 @@ class RealSequencesTest {
         val mismatch = cat.sequenceFiles.filter { f -> val n = f.name.bpm; val m = f.analysis?.bpm; n != null && m != null && kotlin.math.abs(n - m) > 2 }
         out.appendLine("\n== Tempo del nombre distinto al medido (${mismatch.size}):")
         mismatch.forEach { out.appendLine("${it.file}: nombre ${it.name.bpm}, medido ${it.analysis?.bpm}") }
+        // Seguir "de oído" el canal izquierdo real de algunas, como si llegara por la entrada de audio a otra hora.
+        out.appendLine("\n== Escuchar el click (canal izquierdo real, empezando a una hora cualquiera):")
+        for (f in cat.sequenceFiles.filter { it.analysis?.clickLeft == true }.take(12)) {
+            val a = f.analysis!!
+            val (left, _, rate) = SequenceAnalysis.samples(File(music.sequencesDir, f.file), 60) ?: continue
+            var anchor: Long? = null
+            var last: Long? = null
+            val follower = ClickFollower(a.clicks, { anchor = it; last = it }, { last = it })
+            val zero = 7_000_000L
+            val chunk = rate / 50
+            var i = 0
+            while (i < left.size) {
+                val n = minOf(chunk, left.size - i)
+                val buf = ShortArray(n) { left[i + it].toShort() }
+                follower.feed(buf, n, rate, zero + i * 1000L / rate)
+                i += n
+            }
+            out.appendLine("${f.file}: " + (anchor?.let { "arrancó ${it - zero} ms corrido, al final ${last!! - zero} ms" } ?: "NO ARRANCÓ"))
+        }
         File(dir, "reporte-secuencias.txt").writeText(out.toString())
         // Cómo se ve la ventana con estas secuencias
         val m = Musicians(church = ChurchFeatures(sequences = true), catalog = cat, songTitle = ::title, songs = library.catalog.value.songs)

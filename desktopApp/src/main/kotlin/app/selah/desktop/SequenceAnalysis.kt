@@ -219,7 +219,7 @@ object SequenceAnalysis {
         val out = mutableListOf<Double>()
         var last = -1_000
         // 150 ms sin contar otro golpe: el eco de un click no es otro tiempo.
-        for (i in env.indices) if (env[i] > th && i - last > 75) { out += i * 2.0; last = i }
+        for (i in env.indices) if (env[i] > th && i - last > 75) { out += i * hop * 1000.0 / rate; last = i }
         return out
     }
 

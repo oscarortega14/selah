@@ -199,7 +199,7 @@ class MusicLibrary(baseDir: File) {
         val SEQUENCE_EXTENSIONS = setOf("mp3", "wav")
         /** "Secuencia: ninguna" en una canción: no usar ningún audio. */
         const val NONE = "ninguna"
-        private const val ANALYSIS_VERSION = 2
+        private const val ANALYSIS_VERSION = 3
         fun isSequenceFile(name: String) = name.substringAfterLast('.', "").lowercase() in SEQUENCE_EXTENSIONS && !name.startsWith(".")
     }
 }

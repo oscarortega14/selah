@@ -163,6 +163,7 @@ private fun androidx.compose.foundation.layout.RowScope.BeatPulse(click: ClickSt
     val color = if (down) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
     Box(Modifier.size(28.dp).clip(CircleShape).background(color.copy(alpha = 0.15f + 0.85f * glow)))
     val label = when {
+        click.waiting -> "Esperando el click…"
         // Sin BPM se cuentan segundos: "1:23".
         !click.audible -> whole.coerceAtLeast(0).let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
         whole < 0 -> "Cuenta ${click.countIn + whole + 1}"
