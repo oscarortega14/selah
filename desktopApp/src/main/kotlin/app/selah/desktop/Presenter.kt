@@ -21,7 +21,8 @@ import kotlinx.coroutines.flow.update
  */
 /** Dónde están las secuencias, quién las suena y con qué opciones. */
 class SequenceHookup(
-    val fileFor: (songId: String) -> java.io.File?,
+    /** El audio de la canción con su tempo y si ya trae el click (null = no tiene). */
+    val sourceFor: (songId: String) -> SequenceSource?,
     val output: SequenceOutput,
     val options: () -> ChurchFeatures,
 )
@@ -103,6 +104,8 @@ class Presenter(
 
     /** Canción de la secuencia que suena (la letra automática solo vale con ella en pantalla). */
     private var sequenceSongId: String? = null
+    /** El primer tiempo del click del audio cae tantos ms después del inicio (lo que se midió). */
+    private var sequenceOffsetMs = 0L
     /** Sube con cada secuencia: los avisos de una anterior se ignoran. */
     private var sequenceGen = 0
 
@@ -120,22 +123,28 @@ class Presenter(
         val s = _state.value
         val song = s.songId?.takeIf { !s.isBible && !s.sermon && s.media == null && s.presentation == null }?.let { library.song(it) }
             ?: return "Primero pon en pantalla la canción de la secuencia"
-        val file = hook.fileFor(song.id) ?: return "\"${song.title}\" no tiene secuencia: pon el audio (MP3 o WAV) en la carpeta secuencias con el nombre de la canción"
+        val src = hook.sourceFor(song.id) ?: return "\"${song.title}\" no tiene secuencia: pon el audio (MP3 o WAV) en la carpeta secuencias con el nombre de la canción"
+        val file = src.file
         hook.output.check(file)?.let { return it }
         if (s.click != null) stopClickAndSequence()
         val opts = hook.options()
         val beats = song.beatsPerBar ?: 4
-        val split = opts.splitClick && song.bpm != null
+        // Tempo: el de la canción ("BPM:"), si no el del nombre del audio o el que se midió en su click.
+        // Si el audio trae su propio click manda ese (lo que la banda ya oye en los audífonos).
+        val knownBpm = if (src.clickLeft) src.bpm else song.bpm ?: src.bpm
+        // Si el audio ya trae el click a la izquierda, se reproduce tal cual (mezclarlo lo mandaría a los parlantes).
+        val split = opts.splitClick && knownBpm != null && !src.clickLeft
         val countIn = if (split) beats else 0
+        sequenceOffsetMs = src.offsetMs.toLong()
         // Sin BPM no hay click: los "tiempos" de la letra automática cuentan segundos (60 por minuto).
-        val bpm = song.bpm ?: 60
+        val bpm = knownBpm ?: 60
         clickTiming = song.timing
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         val gen = ++sequenceGen
         sequenceSongId = song.id
-        val start = clock() + SEQUENCE_LEAD_MS + Math.round(countIn * 60_000.0 / bpm)
-        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = song.bpm != null)) }
-        hook.output.play(file, SequencePlan(song.bpm, beats, countIn, split, opts.audioDevice), object : SequenceOutput.Listener {
+        val start = clock() + SEQUENCE_LEAD_MS + Math.round(countIn * 60_000.0 / bpm) + sequenceOffsetMs
+        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn, auto = hasTiming, hasTiming = hasTiming, sequence = file.name, audible = knownBpm != null)) }
+        hook.output.play(file, SequencePlan(knownBpm, beats, countIn, split, opts.audioDevice), object : SequenceOutput.Listener {
             override fun musicStartsAt(wallMs: Long) = sequenceStartsAt(gen, wallMs)
             override fun finished(error: String?) = sequenceFinished(gen, error)
         })
@@ -148,7 +157,8 @@ class Presenter(
         _state.update { s ->
             val c = s.click?.takeIf { it.sequence != null } ?: return@update s
             // Solo si se corrió algo que se note (cada cambio se manda a todos los celulares).
-            if (kotlin.math.abs(c.startAt - wallMs) < 4) s else s.copy(click = c.copy(startAt = wallMs))
+            val beat0 = wallMs + sequenceOffsetMs
+            if (kotlin.math.abs(c.startAt - beat0) < 4) s else s.copy(click = c.copy(startAt = beat0))
         }
     }
 

@@ -35,7 +35,9 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import app.selah.shared.GENERAL_INSTRUMENT
+import app.selah.shared.search
 import java.io.File
+import kotlin.math.abs
 
 /** Lo que la ventana de operador necesita saber de los músicos (lo da Main). */
 data class Musicians(
@@ -45,6 +47,10 @@ data class Musicians(
     val songTitle: (String) -> String = { it },
     val music: MusicLibrary? = null,
     val open: () -> Unit = {},
+    /** Canciones de la biblioteca (para asignarles un audio a mano). */
+    val songs: List<app.selah.shared.SongSummary> = emptyList(),
+    /** Elegir el audio de una canción (archivo, "ninguna", o null = el que coincida). Devuelve un error o null. */
+    val chooseSequence: (songId: String, value: String?) -> String? = { _, _ -> null },
 ) {
     fun hasSequence(songId: String?): Boolean = church.sequences && songId != null && songId in catalog.sequences
 }
@@ -132,9 +138,10 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
     val c = m.church
     Text("Secuencias", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     Text(
-        "Un audio por canción, MP3 o WAV, con el mismo nombre de la canción: «Cuán grande es Él.mp3». Con la canción en " +
-            "pantalla, «▶ Secuencia» la hace sonar. Para que la letra pase sola: graba los tiempos una vez (● Grabar tiempos) " +
-            "mientras suena. Si la canción tiene «BPM:», los músicos también tienen el click en el celular.",
+        "Un audio por canción, MP3 o WAV, con el nombre de la canción (también sirven nombres como «Aclamad a Dios - 150 BPM - D.wav» " +
+            "o «Salmo 23 No Bass.wav»). Con la canción en pantalla, «▶ Secuencia» la hace sonar. Si el audio trae el click a la " +
+            "izquierda, Selah lo detecta y toma su tempo: los celulares suenan igual que los audífonos de la banda. Para que la " +
+            "letra pase sola: graba los tiempos una vez (● Grabar tiempos) mientras suena.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -162,15 +169,100 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
                 Text("Click a la izquierda, música a la derecha", fontWeight = FontWeight.Bold)
                 Text(
                     "Para la consola: el canal izquierdo (solo click, con un compás de cuenta) va a los audífonos de la banda y el " +
-                        "derecho (la música) a los parlantes. Solo en canciones con «BPM:». Déjalo apagado si tu secuencia ya trae su click.",
+                        "derecho (la música) a los parlantes. Para audios que no traen click (y con tempo conocido); los que ya lo traen suenan tal cual.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
-    if (m.catalog.sequences.isEmpty()) Text("Todavía no hay secuencias.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    m.catalog.sequences.forEach { (song, file) -> Text("• ${m.songTitle(song)}  ←  $file") }
-    Orphans(m.catalog.sequenceOrphans, "Estos audios no corresponden a ninguna canción (revisa que el nombre sea igual al título):")
+    var error by remember { mutableStateOf<String?>(null) }
+    val choose: (String, String?) -> Unit = { id, v -> error = m.chooseSequence(id, v) }
+    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    val cat = m.catalog
+    if (cat.sequenceFiles.isEmpty()) Text("Todavía no hay secuencias.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (c.splitClick && cat.sequenceFiles.any { it.analysis?.clickLeft == true }) {
+        Text(
+            "Las secuencias que ya traen el click a la izquierda suenan tal cual (Selah no mezcla otro click encima).",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    // Las dudosas primero: se parecen a una canción solo por el comienzo del nombre.
+    var dismissed by remember { mutableStateOf(setOf<String>()) }
+    val doubtful = cat.toConfirm.filter { it.file !in dismissed }
+    if (doubtful.isNotEmpty()) {
+        Text("Revisa estas (${doubtful.size}): el nombre se parece a una canción, pero no igual", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary)
+        doubtful.forEach { f ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("«${f.file}» ¿es «${m.songTitle(f.songId!!)}»?", Modifier.weight(1f))
+                OutlinedButton({ choose(f.songId!!, f.file) }, Modifier.hand()) { Text("Sí") }
+                TextButton({ dismissed = dismissed + f.file }, Modifier.hand()) { Text("No") }
+            }
+        }
+    }
+
+    // Cada canción con su audio, el tempo y si trae el click; si hay varias versiones, se elige.
+    cat.sequences.entries.sortedBy { app.selah.shared.normalizeText(m.songTitle(it.key)) }.forEach { (song, file) ->
+        val info = cat.info(file)
+        val versions = cat.versionsOf(song)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(m.songTitle(song), fontWeight = FontWeight.Bold)
+                Text(sequenceDetails(file, info), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                TextButton({ menu = true }, Modifier.hand()) { Text(if (versions.size > 1) "Versión (${versions.size}) ▾" else "Cambiar ▾") }
+                DropdownMenu(menu, { menu = false }) {
+                    versions.forEach { v -> DropdownMenuItem({ Text((if (v.file == file) "✓ " else "") + v.file) }, { menu = false; choose(song, v.file) }) }
+                    DropdownMenuItem({ Text("Ninguna (sin secuencia)") }, { menu = false; choose(song, MusicLibrary.NONE) })
+                }
+            }
+        }
+    }
+
+    // Sin canción: asignarlos a mano.
+    val orphans = cat.sequenceOrphans
+    if (orphans.isNotEmpty()) {
+        Text("Sin canción (${orphans.size}): asígnalos a mano, o agrega la canción a la biblioteca", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+        orphans.forEach { f -> AssignRow(f, m.songs) { id -> choose(id, f) } }
+    }
+}
+
+/** "150 BPM · tono D · click a la izquierda · No Bass · archivo.wav" */
+private fun sequenceDetails(file: String, info: SequenceFile?): String {
+    val a = info?.analysis
+    return listOfNotNull(
+        (info?.name?.bpm ?: a?.bpm)?.let { "$it BPM" },
+        info?.name?.key?.let { "tono $it" },
+        when {
+            a == null -> "escuchando…"
+            a.clickLeft && a.tempoChanges -> "click a la izquierda, cambia de tempo (en los celulares no suena)"
+            a.clickLeft -> "click a la izquierda" + (a.bpm?.let { m -> if (info.name.bpm != null && abs(m - info.name.bpm!!) > 2) " a $m" else "" } ?: "")
+            else -> "sin click"
+        },
+        info?.name?.version?.takeIf { it.isNotEmpty() },
+        file,
+    ).joinToString(" · ")
+}
+
+/** Un audio sin canción: buscar la canción y asignárselo. */
+@Composable
+private fun AssignRow(file: String, songs: List<app.selah.shared.SongSummary>, onPick: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf(app.selah.shared.parseSequenceName(file).title) }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("   $file", Modifier.weight(1f))
+            TextButton({ open = !open }, Modifier.hand()) { Text(if (open) "Cerrar" else "Asignar…") }
+        }
+        if (open) {
+            androidx.compose.material3.OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción") }, modifier = Modifier.fillMaxWidth().marksTyping())
+            val hits = remember(query, songs) { songs.search(query).take(6) }
+            if (hits.isEmpty()) Text("Ninguna canción con eso. Prueba con otra palabra.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            hits.forEach { s -> TextButton({ onPick(s.id); open = false }, Modifier.hand()) { Text("→ ${s.title}") } }
+        }
+    }
 }
 
 @Composable

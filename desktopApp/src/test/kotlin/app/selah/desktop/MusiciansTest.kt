@@ -72,7 +72,7 @@ class MusiciansTest {
         music.refresh(library.catalog.value.songs)
         commands = Commands(Presenter(library) { now }, ServicePlan(File(dir, "lista.json"), library, present = { null })).also { c ->
             c.church = { church }
-            c.presenter.sequences = SequenceHookup({ id -> music.sequenceFor(id) }, output, { church })
+            c.presenter.sequences = SequenceHookup({ id -> music.sourceFor(id) }, output, { church })
         }
     }
 

@@ -24,6 +24,8 @@ package app.selah.shared
  *   de los cultos y los filtros. No se proyecta.
  * - Opcional, antes de la primera estrofa: "BPM: 72" y "Compás: 4/4" (para el click de los músicos) y
  *   "Tiempos: 0 16 32 -1 48" (en qué tiempo empieza cada diapositiva; lo escribe Selah al grabar).
+ * - Opcional, antes de la primera estrofa: "Secuencia: Aclamad a Dios - 150 BMP - D.wav" (qué audio de la carpeta
+ *   secuencias usa; "Secuencia: ninguna" = ninguno). Lo escribe Selah al elegir la versión.
  * - Opcional, antes de la primera estrofa: "Autor: …" y "CCLI: 1234567" (número de la canción en CCLI,
  *   para el reporte de licencias). No se proyectan.
  * - Acordes (formato ChordPro) justo antes de la sílaba: "[G]Cuán grande es [C]Él". En el videobeam
@@ -37,6 +39,7 @@ object SongParser {
     private val BPM_LINE = Regex("""^bpm\s*:\s*(\d{2,3})\s*$""", RegexOption.IGNORE_CASE)
     private val METER_LINE = Regex("""^comp[aá]s\s*:\s*(\d{1,2})\s*/\s*(\d{1,2})\s*$""", RegexOption.IGNORE_CASE)
     private val TIMING_LINE = Regex("""^tiempos\s*:(.*)$""", RegexOption.IGNORE_CASE)
+    private val SEQUENCE_LINE = Regex("""^secuencia\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val TYPE_LINE = Regex("""^tipos?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val AUTHOR_LINE = Regex("""^autor(?:es)?\s*:(.*)$""", RegexOption.IGNORE_CASE)
     private val CCLI_LINE = Regex("""^ccli\s*(?:#|n[ºo°.]*)?\s*:?\s*(\d{1,10})\s*$""", RegexOption.IGNORE_CASE)
@@ -58,6 +61,7 @@ object SongParser {
         var bpm: Int? = null
         var beatsPerBar: Int? = null
         var timing: List<Int>? = null
+        var sequence: String? = null
 
         for (raw in text.removePrefix("﻿").replace("\r\n", "\n").replace('\r', '\n').split('\n')) {
             val line = raw.trim()
@@ -95,6 +99,10 @@ object SongParser {
                     .map { it.trim().toIntOrNull()?.takeIf { n -> n in 0..100_000 } ?: -1 }
                 continue
             }
+            if (beforeLyrics && sequence == null) SEQUENCE_LINE.matchEntire(line)?.let { m ->
+                sequence = m.groupValues[1].trim()
+                continue
+            }
             val typeMatch = TYPE_LINE.matchEntire(line)
             if (typeMatch != null && tags == null && beforeLyrics) {
                 tags = parseTags(typeMatch.groupValues[1])
@@ -125,7 +133,7 @@ object SongParser {
         val song = if (order.isNullOrEmpty()) Song(id, title, slides) else expand(id, title, slides, order)
         return song.copy(
             background = background, author = author, ccli = ccli, tags = tags.orEmpty(),
-            bpm = bpm, beatsPerBar = beatsPerBar, timing = timing.orEmpty(),
+            bpm = bpm, beatsPerBar = beatsPerBar, timing = timing.orEmpty(), sequence = sequence?.ifEmpty { null },
         )
     }
 

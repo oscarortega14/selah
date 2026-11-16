@@ -144,3 +144,70 @@ object Transpose {
         return chords.toString().trimEnd() to text.toString().trimEnd().let { if (it.isBlank()) "" else it }
     }
 }
+
+/**
+ * Lo que dice el nombre de un audio de secuencia, como los suelen nombrar los ministerios:
+ * "Aclamad a Dios - 150 BMP - D.wav", "Salmo 23 No Bass.wav", "ADORAREMOS SEC BRASS OFF.wav".
+ * [title] sin tempo, tono ni versión; [version] lo que distingue esta grabación ("No Bass", "Brass OFF"…).
+ */
+data class SequenceName(val title: String, val bpm: Int? = null, val key: String? = null, val version: String = "")
+
+private val BPM_IN_NAME = Regex("""(\d{2,3})\s*(?:bpm|bmp)\b""", RegexOption.IGNORE_CASE)
+private val KEY_SEGMENT = Regex("""^[A-G](?:#|b)?m?$""")
+private val NAME_DASH = Regex("""\s*-\s+|\s+-\s*""")
+/** Palabras que dicen la versión de la grabación, no el título. */
+private val VERSION_WORDS = setOf("no", "bass", "strings", "string", "brass", "pads", "pad", "guitar", "guitarra", "on", "off", "&", "y", "original", "salem", "vientos", "sin", "con")
+/** Palabras que sobran ("secuencia", "sec", "final", "ok") o números de copia ("2"). */
+private val NOISE_WORDS = setOf("secuencia", "sec", "final", "ok", "pista", "track")
+
+fun parseSequenceName(fileName: String): SequenceName {
+    var stem = fileName.replace('\\', '/').substringAfterLast('/').let { if ('.' in it) it.substringBeforeLast('.') else it }
+        .replace('_', ' ').trim()
+    val bpm = BPM_IN_NAME.findAll(stem).mapNotNull { it.groupValues[1].toIntOrNull() }.lastOrNull { it in CLICK_MIN_BPM..CLICK_MAX_BPM }
+    val segments = stem.split(NAME_DASH).map { it.trim() }.filter { it.isNotEmpty() }
+    val key = segments.drop(1).lastOrNull { KEY_SEGMENT.matches(it) }
+    // Fuera los pedazos de tempo, tono y números sueltos ("Celebrare - 65 - 145 BMP - Dm").
+    stem = segments.filterIndexed { i, s -> i == 0 || !(BPM_IN_NAME.containsMatchIn(s) || KEY_SEGMENT.matches(s) || s.all { it.isDigit() }) }
+        .joinToString(" - ")
+    val words = stem.split(' ').filter { it.isNotBlank() }.toMutableList()
+    val version = ArrayDeque<String>()
+    fun plain(w: String) = normalizeKey(w).ifEmpty { w.trim() }
+    while (words.size > 1 && plain(words.first()) in NOISE_WORDS) words.removeAt(0)
+    // Un solo dígito al final es el número de copia ("BRASS ON 2"); "Salmo 23" o "Salmo 2.7" no.
+    if (words.size > 2 && words.last().length == 1 && words.last()[0].isDigit()) words.removeAt(words.lastIndex)
+    while (words.size > 1) {
+        val w = words.last()
+        val p = plain(w)
+        when {
+            p in NOISE_WORDS -> words.removeAt(words.lastIndex)
+            p in VERSION_WORDS -> { version.addFirst(w); words.removeAt(words.lastIndex) }
+            else -> break
+        }
+    }
+    // "No Bass" deja "no" pegado al título si el título termina en "No" ("Y Aún Si No"): se devuelve.
+    val title = words.joinToString(" ").trimEnd('-', ' ')
+    val v = version.joinToString(" ").let { if (it.equals("y", true) || it.equals("&", true)) "" else it }
+    return SequenceName(title, bpm, key, v)
+}
+
+/** Palabras de un título para comparar ("Salmo 2:7" y "Salmo 2.7" → salmo, 2, 7). */
+private fun titleWords(s: String): List<String> = normalizeText(s).split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+
+/**
+ * La canción de [songs] que corresponde a un audio. exact = mismo título; si no, una canción cuyo título es el
+ * comienzo del nombre (o al revés): "Gracias Señor Jesús" ↔ "Gracias". Esas hay que confirmarlas.
+ */
+fun matchSequence(name: SequenceName, songs: List<SongSummary>): Pair<SongSummary, Boolean>? {
+    val words = titleWords(name.title)
+    if (words.isEmpty()) return null
+    val byWords = songs.map { it to titleWords(it.title) }
+    byWords.firstOrNull { it.second == words }?.let { return it.first to true }
+    // "Y Aún Si No" quedó sin el "No" de "No Bass": probar también con esa palabra de vuelta.
+    if (name.version.split(' ').first().equals("no", ignoreCase = true)) {
+        val withNo = words + "no"
+        byWords.firstOrNull { it.second == withNo }?.let { return it.first to true }
+    }
+    fun prefix(a: List<String>, b: List<String>) = a.size < b.size && b.subList(0, a.size) == a
+    return byWords.filter { (_, w) -> w.isNotEmpty() && (prefix(w, words) || prefix(words, w)) }
+        .maxByOrNull { it.second.size }?.let { it.first to false }
+}

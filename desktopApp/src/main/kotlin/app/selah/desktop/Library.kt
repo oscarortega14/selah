@@ -165,6 +165,10 @@ class Library(val baseDir: File) {
     fun setSongTiming(id: String, timing: List<Int>): String =
         setHeaderLine(id, TIMING_LINE, timing.takeIf { it.isNotEmpty() }?.let { "Tiempos: " + it.joinToString(" ") })
 
+    /** Qué audio de secuencias usa la canción ("ninguna" = ninguno; null = el que coincida por el nombre). */
+    fun setSongSequence(id: String, value: String?): String =
+        setHeaderLine(id, SEQUENCE_LINE, value?.trim()?.takeIf { it.isNotEmpty() }?.let { "Secuencia: $it" })
+
     /**
      * Reemplaza (o quita, con [newLine] null) una línea del encabezado de la canción, la que cumple [line].
      * Solo en el encabezado (antes de la primera estrofa): una línea de la letra que se parezca no se toca.
@@ -499,7 +503,8 @@ class Library(val baseDir: File) {
         private val TYPE_LINE = Regex("""^tipos?\s*:.*$""", RegexOption.IGNORE_CASE)
         private val TIMING_LINE = Regex("""^tiempos\s*:.*$""", RegexOption.IGNORE_CASE)
         /** Líneas que van antes de la letra (no se proyectan). */
-        private val HEADER_LINES = listOf(TYPE_LINE, TIMING_LINE, Regex("""^(orden|fondo|autor(es)?|ccli|bpm|comp[aá]s)\b.*$""", RegexOption.IGNORE_CASE))
+        private val HEADER_LINES = listOf(TYPE_LINE, TIMING_LINE, Regex("""^(orden|fondo|autor(es)?|ccli|bpm|comp[aá]s|secuencia)\b.*$""", RegexOption.IGNORE_CASE))
+        private val SEQUENCE_LINE = Regex("""^secuencia\s*:.*$""", RegexOption.IGNORE_CASE)
         private val FONDO_LINE = Regex("""^fondo\s*:.*$""", RegexOption.IGNORE_CASE)
         private val FORBIDDEN = Regex("""[\\/:*?"<>|\u0000-\u001F]""")
 

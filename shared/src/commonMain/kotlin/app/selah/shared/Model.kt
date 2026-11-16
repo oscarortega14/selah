@@ -188,6 +188,8 @@ data class Song(
     val beatsPerBar: Int? = null,
     /** Línea "Tiempos:": en qué tiempo empieza cada diapositiva (-1 = sin grabar). Vacío = no tiene. */
     val timing: List<Int> = emptyList(),
+    /** Línea "Secuencia:": el audio elegido de la carpeta secuencias ("ninguna" = ninguno); null = el que coincida. */
+    val sequence: String? = null,
 ) {
     fun summary() = SongSummary(id, title, slides.firstOrNull()?.text?.lineSequence()?.firstOrNull().orEmpty(), tags)
 }

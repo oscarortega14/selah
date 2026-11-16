@@ -58,10 +58,12 @@ fun main() {
     }
     val presenter = commands.presenter
     // Lo de los músicos: partituras y secuencias (carpetas partituras/ y secuencias/).
-    val music = MusicLibrary(baseDir).also { it.refresh(library.catalog.value.songs) }
+    val music = MusicLibrary(baseDir)
+    val refreshMusic = { music.refresh(library.catalog.value.songs) { id -> library.song(id)?.sequence } }
+    refreshMusic()
     commands.church = { settingsStore.value.church }
     presenter.sequences = SequenceHookup(
-        fileFor = { id -> if (settingsStore.value.church.sequences) music.sequenceFor(id) else null },
+        sourceFor = { id -> if (settingsStore.value.church.sequences) music.sourceFor(id) else null },
         output = JavaSoundSequenceOutput(),
         options = { settingsStore.value.church },
     )
@@ -107,7 +109,7 @@ fun main() {
                 kotlinx.coroutines.delay(5000)
                 withContext(Dispatchers.IO) {
                     library.refreshAnnouncements()
-                    music.refresh(library.catalog.value.songs)
+                    refreshMusic()
                 }
             }
         }
@@ -202,6 +204,10 @@ fun main() {
                     songTitle = { id -> library.song(id)?.title ?: id },
                     music = music,
                     open = { musiciansOpen = true },
+                    songs = catalog.songs,
+                    chooseSequence = { id, value ->
+                        runCatching { library.setSongSequence(id, value); refreshMusic(); null }.getOrElse { it.message ?: "No pude guardarlo" }
+                    },
                 )
                 androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship, LocalMusicians provides musicians) {
                 OperatorScreen(
@@ -251,7 +257,7 @@ fun main() {
                     presentationsReady = presentationsReady,
                 )
                 if (servicesOpen) ServicesWindow(worship, onClose = { servicesOpen = false })
-                if (musiciansOpen) MusiciansWindow(musicians, onClose = { musiciansOpen = false; music.refresh(library.catalog.value.songs) })
+                if (musiciansOpen) MusiciansWindow(musicians, onClose = { musiciansOpen = false; refreshMusic() })
                 }
                 // La primera vez: guía corta. Después del aviso del firewall, para no encimar ventanas.
                 if (!settings.welcomeDone && !askFirewall) {

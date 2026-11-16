@@ -100,7 +100,7 @@ class JavaSoundSequenceOutput : SequenceOutput {
     @Volatile private var current: Playback? = null
 
     override fun check(file: File): String? = try {
-        open(file).use { null }
+        openPcm(file).use { null }
     } catch (e: Exception) {
         "No pude leer la secuencia \"${file.name}\": usa MP3 o WAV (${e.message ?: e::class.simpleName})"
     }
@@ -115,14 +115,6 @@ class JavaSoundSequenceOutput : SequenceOutput {
         current = null
     }
 
-    /** La música como PCM de 16 bits, intercalado, en su frecuencia original. */
-    private fun open(file: File): AudioInputStream {
-        val src = AudioSystem.getAudioInputStream(file)
-        val f = src.format
-        val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
-        val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)
-        return if (f.matches(pcm)) src else AudioSystem.getAudioInputStream(pcm, src)
-    }
 
     private inner class Playback(val file: File, val plan: SequencePlan, val listener: SequenceOutput.Listener) : Thread("secuencia") {
         @Volatile private var fadeFrom: Long = -1
@@ -142,7 +134,7 @@ class JavaSoundSequenceOutput : SequenceOutput {
         }
 
         private fun playAll() {
-            open(file).use { input ->
+            openPcm(file).use { input ->
                 val rate = input.format.sampleRate.toInt()
                 val channels = input.format.channels
                 val outFormat = AudioFormat(rate.toFloat(), 16, 2, true, false)
@@ -231,4 +223,15 @@ class JavaSoundSequenceOutput : SequenceOutput {
                 .map { it.name }.distinct()
         }.getOrDefault(emptyList())
     }
+}
+
+/** La música como PCM de 16 bits, intercalado, en su frecuencia original (WAV, o MP3 con mp3spi). */
+internal fun openPcm(file: File): AudioInputStream {
+    // WAV con lector propio: el de Java falla con los de 24 bits, coma flotante o con un bloque "JUNK".
+    if (file.extension.equals("wav", ignoreCase = true)) return WavReader.open(file)
+    val src = AudioSystem.getAudioInputStream(file)
+    val f = src.format
+    val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
+    val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)
+    return if (f.matches(pcm)) src else AudioSystem.getAudioInputStream(pcm, src)
 }

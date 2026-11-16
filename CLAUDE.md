@@ -134,6 +134,12 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   `Presentations(nested = true)`). Secuencias: `SequencePlayer.kt` (Java Sound + mp3spi, `SequenceMixer` arma click
   izquierda/música derecha), `Presenter.startSequence` usa `ClickState.sequence`/`audible` (sin BPM: 60 "tiempos" por
   minuto = segundos); la tarjeta de sonido corrige `startAt` cada 2 s. Cambiar de canción NO corta la música.
+- Secuencias reales (IC Salem, 82 audios, probado 2026-11-16): `parseSequenceName` lee "Canción - 150 BMP - D", "No Bass",
+  "Brass ON/OFF"…; `matchSequence` (exacta o por el comienzo → "Revisa estas"); línea `Secuencia:` en la canción para la
+  versión elegida, una asignada a mano o `ninguna`. `SequenceAnalysis` detecta el click a la izquierda (rejilla del pulso
+  y cobertura; la voz guía no estorba), su tempo, el desfase y si cambia de tempo (entonces los celulares no suenan).
+  Con click propio, el tempo es el medido (no el del nombre). `WavReader`: WAV con bloque JUNK, 24 bits y coma flotante
+  (el de Java no los abre). Reporte con secuencias reales: `SELAH_REAL_DIR=… --tests '*RealSequencesTest*'`.
 - App: modo músico (`MusicianView.kt`, "¿Quién usa este celular?", rol e instrumento guardados en el teléfono),
   pestaña "Músicos" para el operador, `decodeImage` por plataforma. Probado en el emulador Android con Selah en la Mac
   (partitura, acordes, secuencia iniciada desde el celular, ±2 ms). Falta: probar en consola real y en iPhone.
