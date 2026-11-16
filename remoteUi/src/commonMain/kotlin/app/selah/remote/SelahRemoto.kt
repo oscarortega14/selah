@@ -93,6 +93,8 @@ internal fun KeyValueStore.migrateLegacyPin() {
 /** Le enseña al cliente dónde está la clave guardada y la recuerda cuando el PC la acepta. */
 fun RemoteClient.useStore(store: KeyValueStore) {
     store.migrateLegacyPin()
+    deviceId = store.deviceId()
+    deviceName = store.get("nombre-celular")?.ifBlank { null } ?: deviceModel()
     // La clave se manda sola solo al computador donde se aceptó.
     savedPin = { host -> store.get("pin")?.takeIf { store.get("pinHost") == host } }
     onPinAccepted = { host, pin -> store.put("pin" to pin, "pinHost" to host) }

@@ -149,6 +149,11 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   `TimingGuess.kt` (avisos → comienzos, "repetir" repartido parejo, secciones por tipo), `GuideTimings.kt` (+ `VoiceModel`:
   descarga con SHA-256 a `Selah/modelos`), `Library.applySuggestion/undoSuggestion`. Real: 40 de 42 canciones en 98 s.
   Páginas de partitura que siguen la letra en el celular (`pageFor`, correcciones guardadas por partitura).
+- Equipo y papeles (`shared/Roles.kt`: `Role`, `Permission`, `ClientMessage.requiredPermission()`; `TeamStore.kt` en
+  `Selah/equipo.json` con SHA-256 del código del celular; `TeamUi.kt` ventana "Equipo"; `FEATURE_ROLES`). `Hello(deviceId,
+  deviceName)` y `Auth(role, instrument, pending)` con valores por defecto (apps viejas: la clave = operador). El servidor
+  rechaza por permiso ("Tu papel (…) no permite eso"); `/partitura` pide `X-Selah-Dispositivo` o la clave. Probado en el
+  emulador: esperando → músico (★ Bajo, ve el piano) → director (inicia la secuencia). Sin clave en el PC: todos operador.
 - App: modo músico (`MusicianView.kt`, "¿Quién usa este celular?", rol e instrumento guardados en el teléfono),
   pestaña "Músicos" para el operador, `decodeImage` por plataforma. Probado en el emulador Android con Selah en la Mac
   (partitura, acordes, secuencia iniciada desde el celular, ±2 ms). Falta: probar en consola real y en iPhone.

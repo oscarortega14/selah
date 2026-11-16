@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import app.selah.shared.cleanListName
 import app.selah.shared.forOldRemotes
+import app.selah.shared.requiredPermission
 
 import app.selah.shared.ClientMessage
 import app.selah.shared.DEFAULT_PORT
@@ -53,7 +54,16 @@ class RemoteServer(
     private val church: kotlinx.coroutines.flow.StateFlow<ChurchFeatures> = kotlinx.coroutines.flow.MutableStateFlow(ChurchFeatures.ALL),
     /** Partituras y secuencias (null = no hay). */
     private val music: MusicLibrary? = null,
+    /** Celulares aprobados y su papel (null = sin papeles: la clave controla todo, como antes). */
+    private val team: TeamStore? = null,
 ) {
+    /** Papel de quien llama por HTTP: con la clave, operador; con el código de un celular aprobado, su papel. */
+    private fun httpRole(pinHeader: String?, deviceHeader: String?): app.selah.shared.Role = when {
+        !guard.required -> app.selah.shared.Role.OPERATOR
+        pinHeader != null && pinHeader == pin.value -> app.selah.shared.Role.OPERATOR
+        else -> deviceHeader?.takeIf(TeamStore::validId)?.let { team?.member(TeamStore.hash(it))?.role } ?: app.selah.shared.Role.VIEWER
+    }
+    private fun io.ktor.server.application.ApplicationCall.role() = httpRole(request.headers["X-Proyecta-Pin"], request.headers[DEVICE_HEADER])
     private val musicCatalog: kotlinx.coroutines.flow.Flow<MusicCatalog> = music?.catalog ?: kotlinx.coroutines.flow.flowOf(MusicCatalog())
     private val guard = PinGuard(pin)
     private val presenter get() = commands.presenter
@@ -110,6 +120,7 @@ class RemoteServer(
             get("/partitura/paginas") {
                 val name = call.request.queryParameters["nombre"].orEmpty()
                 val pages = music?.takeIf { church.value.scores }?.scorePages
+                if (team != null && !call.role().can(app.selah.shared.Permission.SCORES)) { call.respondText("Las partituras son para los músicos del equipo", status = HttpStatusCode.Forbidden); return@get }
                 if (pages?.file(name) == null) { call.respondText("No encontrada", status = HttpStatusCode.NotFound); return@get }
                 val count = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { pages.pages(name).size } }
                 count.onSuccess { call.respondText("{\"paginas\":$it}", ContentType.Application.Json) }
@@ -119,6 +130,7 @@ class RemoteServer(
                 val name = call.request.queryParameters["nombre"].orEmpty()
                 val n = call.request.queryParameters["n"]?.toIntOrNull()
                 val pages = music?.takeIf { church.value.scores }?.scorePages
+                if (team != null && !call.role().can(app.selah.shared.Permission.SCORES)) { call.respondText("Las partituras son para los músicos del equipo", status = HttpStatusCode.Forbidden); return@get }
                 // pages() espera si la partitura se está convirtiendo en este momento.
                 val file = if (pages != null && n != null && pages.file(name) != null)
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { pages.pages(name).getOrNull(n) }.getOrNull() }
@@ -132,7 +144,8 @@ class RemoteServer(
                     call.respondText("No permitido", status = HttpStatusCode.Forbidden)
                     return@post
                 }
-                if (guard.required) {
+                val byDevice = team != null && call.request.headers[DEVICE_HEADER] != null && call.role().can(app.selah.shared.Permission.UPLOAD)
+                if (guard.required && !byDevice) {
                     val attempt = call.request.headers["X-Proyecta-Pin"].orEmpty()
                     if (guard.check(address, attempt) != PinGuard.Result.Ok) {
                         call.respondText("Falta la clave o es incorrecta", status = HttpStatusCode.Unauthorized)
@@ -250,23 +263,44 @@ class RemoteServer(
                 Log.info("Remoto conectado desde $address")
                 // Clave con la que esta conexión se autorizó (si la clave cambia, deja de valer).
                 var granted: String? = null
+                // Este celular (SHA-256 de su código) y su papel ahora.
+                var deviceHash: String? = null
+                val roleFlow = kotlinx.coroutines.flow.MutableStateFlow(app.selah.shared.Role.VIEWER)
+                fun currentRole(): app.selah.shared.Role = when {
+                    guard.allows(granted) -> app.selah.shared.Role.OPERATOR // con la clave (o sin clave en el PC)
+                    else -> team?.member(deviceHash)?.role ?: app.selah.shared.Role.VIEWER
+                }
                 // ¿Este remoto entiende State.keepSlides? (lo dice en Hello). Y qué diapositivas tiene ya.
                 val lean = java.util.concurrent.atomic.AtomicBoolean(false)
                 // ¿Entiende las presentaciones en la lista? (las apps anteriores fallarían con un tipo nuevo)
                 val knowsPresentations = kotlinx.coroutines.flow.MutableStateFlow(false)
                 var sentSlides: List<app.selah.shared.Slide>? = null
-                fun auth(message: String? = null) = ServerMessage.Auth(guard.required, guard.allows(granted), message)
+                fun auth(message: String? = null): ServerMessage.Auth {
+                    val r = currentRole()
+                    roleFlow.value = r
+                    val m = team?.member(deviceHash)
+                    val waiting = deviceHash != null && m == null && team?.pending?.value?.any { it.idHash == deviceHash } == true
+                    return ServerMessage.Auth(guard.required, r == app.selah.shared.Role.OPERATOR, message, role = team?.let { r }, instrument = m?.instrument, pending = waiting)
+                }
                 // Envía biblioteca y estado al conectarse, y luego cada vez que cambien.
                 val pushJob = launch {
-                    launch { pin.collect { send(Frame.Text(auth().encode())) } }
+                    // La clave, el equipo o los que esperan cambiaron: el papel de este celular puede ser otro.
+                    launch {
+                        // Sin filtrar repetidos: el último aviso pudo mandarse por fuera (al dar la clave) y este puede ser distinto.
+                        kotlinx.coroutines.flow.combine(pin, team?.team ?: kotlinx.coroutines.flow.flowOf(null), team?.pending ?: kotlinx.coroutines.flow.flowOf(null)) { _, _, _ -> auth() }
+                            .collect { send(Frame.Text(it.encode())) }
+                    }
                     launch {
                         // Con la fecha en que se cantó cada canción (historial) y el aviso de repetidas (cultos).
-                        kotlinx.coroutines.flow.combine(library.catalog, historyEntries, servicesConfig, church, musicCatalog) { c, _, cfg, ch, mus ->
+                        val musicAndRole = kotlinx.coroutines.flow.combine(church, musicCatalog, roleFlow) { ch, mus, r -> Triple(ch, mus, r) }
+                        kotlinx.coroutines.flow.combine(library.catalog, historyEntries, servicesConfig, musicAndRole) { c, _, cfg, (ch, mus, role) ->
                             val sung = commands.history?.lastSung().orEmpty()
                             ServerMessage.Library(
                                 withLastSung(c.songs, sung), c.bibleName, library.bible?.bookInfos().orEmpty(), c.announcements, c.sermons,
-                                c.bibleNames, c.secondBibleName, c.presentations, features = serverFeatures(ch), repeatDays = cfg.repeatDays,
-                                scores = if (ch.scores) mus.scores else emptyList(),
+                                c.bibleNames, c.secondBibleName, c.presentations,
+                                features = serverFeatures(ch) + listOfNotNull(app.selah.shared.FEATURE_ROLES.takeIf { team != null }), repeatDays = cfg.repeatDays,
+                                // Las partituras solo a quien puede verlas (todos los músicos ven todas).
+                                scores = if (ch.scores && (team == null || role.can(app.selah.shared.Permission.SCORES))) mus.scores else emptyList(),
                                 sequences = if (ch.sequences) mus.sequences.keys.toList() else emptyList(),
                             )
                         }.distinctUntilChanged().collect { m -> send(Frame.Text(m.encode())) }
@@ -315,6 +349,13 @@ class RemoteServer(
                         if (msg is ClientMessage.Hello) {
                             lean.set(app.selah.shared.FEATURE_KEEP_SLIDES in msg.features)
                             knowsPresentations.value = app.selah.shared.FEATURE_PRESENTATIONS in msg.features
+                            // El celular se presenta: si es del equipo, su papel; si no, queda pidiendo entrar.
+                            val id = msg.deviceId
+                            if (team != null && id != null && TeamStore.validId(id)) {
+                                deviceHash = TeamStore.hash(id)
+                                team.hello(deviceHash!!, TeamStore.cleanName(msg.deviceName), address)
+                                send(Frame.Text(auth().encode()))
+                            }
                             continue
                         }
                         if (msg is ClientMessage.Login) {
@@ -326,8 +367,16 @@ class RemoteServer(
                             send(Frame.Text(reply.encode()))
                             continue
                         }
-                        if (!guard.allows(granted)) {
-                            send(Frame.Text(auth("Escribe la clave para controlar").encode()))
+                        // Cada orden pide un permiso; el papel de este celular lo tiene o no (nadie se salta su papel).
+                        val need = msg.requiredPermission()
+                        val role = currentRole()
+                        if (need != null && !role.can(need)) {
+                            val reply = when {
+                                role != app.selah.shared.Role.VIEWER -> ServerMessage.Error("Tu papel (${role.label}) no permite eso")
+                                auth().pending -> auth("Esperando que el operador te dé acceso en el computador")
+                                else -> auth("Escribe la clave para controlar")
+                            }
+                            send(Frame.Text(reply.encode()))
                             continue
                         }
                         commands.handle(msg)?.let { err -> send(Frame.Text(ServerMessage.Error(err).encode())) }
@@ -342,6 +391,9 @@ class RemoteServer(
     }
 
     companion object {
+        /** Cabecera HTTP con el código del celular (partituras, subir anuncios). */
+        const val DEVICE_HEADER = "X-Selah-Dispositivo"
+
         /** Tope de lo que se puede subir desde un celular (un video corto). */
         const val MAX_UPLOAD = 300_000_000L
 

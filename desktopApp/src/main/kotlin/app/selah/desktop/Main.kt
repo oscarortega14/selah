@@ -32,6 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
+import app.selah.shared.instrumentsOf
 
 fun main() {
     val baseDir = LibraryFolder.dir
@@ -70,7 +71,8 @@ fun main() {
     )
     // Clave para controlar desde la red: se crea sola la primera vez (se puede cambiar o quitar).
     if (settingsStore.value.pin == null) settingsStore.update { it.copy(pin = Settings.randomPin()) }
-    val server = RemoteServer(commands, library, pin = settingsStore.pin, church = settingsStore.church, music = music)
+    val team = TeamStore(File(baseDir, "equipo.json"))
+    val server = RemoteServer(commands, library, pin = settingsStore.pin, church = settingsStore.church, music = music, team = team)
     val backups = Backups(baseDir, settingsStore)
     val serverError = runCatching { server.start() }.exceptionOrNull()?.let {
         Log.error("No pude abrir el puerto ${server.port}", it)
@@ -124,6 +126,8 @@ fun main() {
         var biblesOpen by remember { mutableStateOf(false) }
         var servicesOpen by remember { mutableStateOf(false) }
         var musiciansOpen by remember { mutableStateOf(false) }
+        var teamOpen by remember { mutableStateOf(false) }
+        val teamPending by team.pending.collectAsState()
         val musicCatalog by music.catalog.collectAsState()
         // Respaldo semanal automático, un rato después de abrir.
         LaunchedEffect(Unit) {
@@ -205,6 +209,8 @@ fun main() {
                     songTitle = { id -> library.song(id)?.title ?: id },
                     music = music,
                     open = { musiciansOpen = true },
+                    openTeam = { teamOpen = true },
+                    teamWaiting = teamPending.size,
                     songs = catalog.songs,
                     chooseSequence = { id, value ->
                         runCatching { library.setSongSequence(id, value); refreshMusic(); null }.getOrElse { it.message ?: "No pude guardarlo" }
@@ -261,6 +267,7 @@ fun main() {
                     presentationsReady = presentationsReady,
                 )
                 if (servicesOpen) ServicesWindow(worship, onClose = { servicesOpen = false })
+                if (teamOpen) TeamWindow(team, instrumentsOf(musicCatalog.scores), onClose = { teamOpen = false })
                 if (musiciansOpen) MusiciansWindow(musicians, onClose = { musiciansOpen = false; refreshMusic() })
                 }
                 // La primera vez: guía corta. Después del aviso del firewall, para no encimar ventanas.
@@ -287,7 +294,7 @@ fun main() {
                     BackupsDialog(
                         backups, settings,
                         onChooseCopyDir = { d -> settingsStore.update { it.copy(backupCopyDir = d) } },
-                        onRestored = { library.reload(); commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk(); commands.services?.reloadFromDisk() },
+                        onRestored = { library.reload(); commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk(); commands.services?.reloadFromDisk(); team.reloadFromDisk() },
                         onClose = { backupsOpen = false },
                     )
                 }

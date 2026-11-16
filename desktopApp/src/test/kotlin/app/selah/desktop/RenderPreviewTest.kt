@@ -52,6 +52,17 @@ class RenderPreviewTest {
         ImageComposeScene(820, 1500, Density(1f)) { MusiciansContent(musicians, devices = listOf("Altavoces del MacBook Pro", "Tarjeta USB")) }.use { scene ->
             File(outDir, "10-que-usa-tu-iglesia.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
         }
+        // Ventana "Equipo": uno pidiendo entrar y el equipo aprobado.
+        val teamDir = kotlin.io.path.createTempDirectory("equipo").toFile()
+        val team = TeamStore(File(teamDir, "equipo.json"))
+        team.hello("a".repeat(64), "Celular de Juan", "192.168.1.30:51234")
+        team.hello("b".repeat(64), "Ana", "x"); team.approve("b".repeat(64), app.selah.shared.Role.DIRECTOR, "Piano")
+        team.hello("c".repeat(64), "Pedro", "x"); team.approve("c".repeat(64), app.selah.shared.Role.MUSICIAN, "Bajo")
+        team.hello("d".repeat(64), "Pastor Luis", "x"); team.approve("d".repeat(64), app.selah.shared.Role.PREACHER, null)
+        ImageComposeScene(760, 1100, Density(1f)) { TeamContent(team, listOf("Bajo", "Piano")) }.use { scene ->
+            File(outDir, "11-equipo.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        }
+        teamDir.deleteRecursively()
         // El caso reportado: ventana de proyección de ~1180x630 con palabras largas al final.
         val reported = PresentationState("A", listOf(Slide("Pregón 3", "Con la fe en Jesucristo tengo el poder\nUn poder como ninguno, tesoro invaluable")), 0)
         ImageComposeScene(1180, 630, Density(1.25f)) { ProjectorScreen(reported, look = Look(Theme(builtin = null))) }.use { scene ->

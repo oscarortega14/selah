@@ -110,7 +110,13 @@ sealed interface ClientMessage {
      * deja de repetir el texto de todas las diapositivas en cada "Siguiente" (ver State.keepSlides).
      */
     @Serializable @SerialName("hello")
-    data class Hello(val features: List<String> = emptyList()) : ClientMessage
+    data class Hello(
+        val features: List<String> = emptyList(),
+        /** Código secreto de este celular (lo crea la app una vez): con él el PC lo reconoce y le da su papel. */
+        val deviceId: String? = null,
+        /** Nombre para mostrar en el PC ("Celular de Juan"). */
+        val deviceName: String? = null,
+    ) : ClientMessage
 
     /** Clave de 4 números para poder controlar (si el PC la pide). Responde con ServerMessage.Auth. */
     @Serializable @SerialName("login")
@@ -299,7 +305,18 @@ sealed interface ServerMessage {
      * [required] el PC pide clave; [ok] ya la dio (o no hace falta); [message] por qué no.
      */
     @Serializable @SerialName("auth")
-    data class Auth(val required: Boolean, val ok: Boolean, val message: String? = null) : ServerMessage
+    data class Auth(
+        val required: Boolean,
+        /** Puede controlar todo (operador o clave). Las apps viejas solo miran esto. */
+        val ok: Boolean,
+        val message: String? = null,
+        /** Su papel en el equipo (PC con [FEATURE_ROLES]); null = PC viejo. */
+        val role: Role? = null,
+        /** Instrumento que el PC le sugiere (el músico puede ver las demás partituras igual). */
+        val instrument: String? = null,
+        /** Este celular está esperando que el operador lo apruebe en el PC. */
+        val pending: Boolean = false,
+    ) : ServerMessage
 }
 
 /** Capacidad de Hello: entiende State.keepSlides. */

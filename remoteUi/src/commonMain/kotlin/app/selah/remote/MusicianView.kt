@@ -88,6 +88,10 @@ fun MusicianView(
     onNeedPin: () -> Unit,
     /** Preferencias del teléfono: dónde empieza cada página de cada partitura (lo que corrigió el músico). */
     prefs: KeyValueStore? = null,
+    /** El instrumento que le sugiere el PC (se marca con ★); puede ver todos igual. */
+    suggestedInstrument: String? = null,
+    /** Mostrar los botones de iniciar/parar el click y la secuencia (el músico con papel solo ve el pulso). */
+    showControls: Boolean = true,
 ) {
     val songId = state.songId?.takeIf { !state.isBible && !state.sermon && state.media == null && state.presentation == null }
     val score = songId?.let { scoreFor(scores, it, instrument) }
@@ -99,12 +103,12 @@ fun MusicianView(
     val transpose = remember { mutableStateMapOf<String, Int>() }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (FEATURE_CLICK in features || FEATURE_SEQUENCES in features) {
+        if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || state.click != null)) {
             ClickPanel(
                 state.click, { client.serverOffset }, client::send, { client.clockRtt },
                 clickAllowed = FEATURE_CLICK in features,
                 sequenceAvailable = FEATURE_SEQUENCES in features && songId != null && songId in sequences,
-                canControl = canControl, onNeedPin = onNeedPin,
+                canControl = canControl, onNeedPin = onNeedPin, controls = showControls,
             )
         }
         Text(
@@ -116,7 +120,10 @@ fun MusicianView(
         if (FEATURE_SCORES in features && instruments.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 item { Text("Toco:", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(instruments) { i -> FilterChip(instrument.equals(i, ignoreCase = true), { onInstrument(if (instrument.equals(i, true)) null else i) }, { Text(i) }) }
+                items(instruments) { i ->
+                    val mine = suggestedInstrument.equals(i, ignoreCase = true)
+                    FilterChip(instrument.equals(i, ignoreCase = true), { onInstrument(if (instrument.equals(i, true)) null else i) }, { Text(if (mine) "★ $i" else i) })
+                }
             }
         }
         if (views.size > 1) {

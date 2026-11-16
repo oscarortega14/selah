@@ -61,6 +61,8 @@ fun ClickPanel(
     /** Puede iniciar o parar (tiene la clave o no se pide); si no, [onNeedPin]. */
     canControl: Boolean = true,
     onNeedPin: () -> Unit = {},
+    /** false = solo mirar y escuchar (el músico): sin botones de iniciar, parar, tempo ni grabar. */
+    controls: Boolean = true,
 ) {
     val act: (ClientMessage) -> Unit = { m -> if (canControl) send(m) else onNeedPin() }
     var open by rememberSaveable { mutableStateOf(false) }
@@ -106,7 +108,7 @@ fun ClickPanel(
                 val sequence = click.sequence
                 if (sequence != null) Text("▶ ${sequence.substringBeforeLast('.')}" + if (click.following) " · siguiendo" else "", fontWeight = FontWeight.Bold, maxLines = 1)
                 // La secuencia suena en otro aparato: si la letra va adelantada o atrasada, se corre un poquito.
-                if (sequence != null && click.following) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (controls && sequence != null && click.following) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("La letra va…", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedButton({ act(ClientMessage.SequenceNudge(100)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("adelantada") }
                     OutlinedButton({ act(ClientMessage.SequenceNudge(-100)) }, contentPadding = PaddingValues(horizontal = 10.dp)) { Text("atrasada") }
@@ -118,13 +120,13 @@ fun ClickPanel(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (click.audible) FilterChip(listening, { listening = !listening }, { Text(if (listening) "🎧 Sonando aquí" else "🎧 Escuchar aquí", maxLines = 1) }, Modifier.weight(1f))
                     else Text("Sin BPM: la secuencia no tiene click", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (sequence == null) {
+                    if (controls && sequence == null) {
                         OutlinedButton({ act(ClientMessage.SetTempo(click.bpm - 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("−", fontSize = 18.sp) }
                         OutlinedButton({ act(ClientMessage.SetTempo(click.bpm + 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("+", fontSize = 18.sp) }
                     }
-                    Button({ act(if (sequence != null) ClientMessage.StopSequence else ClientMessage.StopClick) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("■ Parar") }
+                    if (controls) Button({ act(if (sequence != null) ClientMessage.StopSequence else ClientMessage.StopClick) }, contentPadding = PaddingValues(horizontal = 14.dp)) { Text("■ Parar") }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (controls) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     when {
                         click.recording -> Button({ act(ClientMessage.RecordTiming(false)) }) { Text("● Grabando · Terminar") }
                         click.hasTiming && click.auto -> TextButton({ act(ClientMessage.SetAutoLyrics(false)) }) { Text(if (click.suggested) "Letra automática (sugerida) ✓ · Pausar" else "Letra automática ✓ · Pausar") }

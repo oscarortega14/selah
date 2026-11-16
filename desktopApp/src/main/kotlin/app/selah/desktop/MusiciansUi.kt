@@ -48,6 +48,9 @@ data class Musicians(
     val songTitle: (String) -> String = { it },
     val music: MusicLibrary? = null,
     val open: () -> Unit = {},
+    /** Abrir la ventana Equipo y cuántos celulares esperan que los aprueben. */
+    val openTeam: () -> Unit = {},
+    val teamWaiting: Int = 0,
     /** Canciones de la biblioteca (para asignarles un audio a mano). */
     val songs: List<app.selah.shared.SongSummary> = emptyList(),
     /** Elegir el audio de una canción (archivo, "ninguna", o null = el que coincida). Devuelve un error o null. */

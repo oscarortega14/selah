@@ -1,5 +1,7 @@
 package app.selah.remote
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -106,3 +108,12 @@ class IosStore : KeyValueStore {
 actual fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
     org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
 }.getOrNull()
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+actual fun secureRandomBytes(bytes: Int): ByteArray {
+    val out = ByteArray(bytes)
+    out.usePinned { pinned -> platform.Security.SecRandomCopyBytes(platform.Security.kSecRandomDefault, bytes.toULong(), pinned.addressOf(0)) }
+    return out
+}
+
+actual fun deviceModel(): String = platform.UIKit.UIDevice.currentDevice.name

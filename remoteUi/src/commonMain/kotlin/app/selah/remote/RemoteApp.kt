@@ -125,17 +125,29 @@ internal fun RemoteApp(
         var pinDismissed by remember(auth) { mutableStateOf(false) }
         val needsPin = auth?.let { it.required && !it.ok } == true
         val musicians = hasMusicianFeatures(features) && !isDemo
-        val musicianMode = musicians && role == "musico" && !editingHost
+        // Con papeles en el PC, el papel lo decide el operador (Equipo); si no, este celular dice quién lo usa.
+        val rolesOnPc = app.selah.shared.FEATURE_ROLES in features && !isDemo
+        val pcRole = auth?.role.takeIf { rolesOnPc }
+        val waitingApproval = rolesOnPc && auth?.pending == true
+        val musicianMode = !editingHost && if (rolesOnPc) pcRole == app.selah.shared.Role.MUSICIAN || pcRole == app.selah.shared.Role.DIRECTOR
+            else musicians && role == "musico"
         // El músico no necesita la clave para ver lo suyo; se le pide solo si quiere iniciar el click o la secuencia.
         var musicianWantsPin by remember { mutableStateOf(false) }
-        // Primero "¿Quién usa este celular?": a un músico no se le pide la clave de entrada.
-        val askingRole = musicians && role == null
-        if (needsPin && !editingHost && ((!musicianMode && !askingRole && !pinDismissed) || musicianWantsPin)) {
+        // Primero "¿Quién usa este celular?" (o esperar al operador): no se pide la clave de entrada.
+        val askingRole = (!rolesOnPc && musicians && role == null) || waitingApproval
+        // Con papel asignado (predicador, medios…) la clave no se pide sola: sería pasarse a operador.
+        val hasOwnRole = pcRole != null && pcRole != app.selah.shared.Role.VIEWER
+        if (needsPin && !editingHost && ((!musicianMode && !askingRole && !hasOwnRole && !pinDismissed) || musicianWantsPin)) {
             PinDialog(pcName, auth?.message, onDismiss = { pinDismissed = true; musicianWantsPin = false }) { client.login(it) }
         }
         LaunchedEffect(needsPin) { if (!needsPin) musicianWantsPin = false }
-        if (needsPin && !editingHost && (pinDismissed || askingRole) && !musicianMode) {
+        if (waitingApproval && !editingHost) {
+            WaitingApproval(pcName, client.deviceName.orEmpty(), onRename = { n -> store?.put("nombre-celular" to n); client.rename(n) }, onPin = { musicianWantsPin = true })
+        } else if (needsPin && !editingHost && (pinDismissed || askingRole) && !musicianMode && !hasOwnRole) {
             TextButton({ pinDismissed = false }, Modifier.fillMaxWidth()) { Text("Solo mirando · Escribir la clave para controlar") }
+        }
+        if (hasOwnRole && !musicianMode && !editingHost && pcRole != app.selah.shared.Role.OPERATOR) {
+            Text("Eres: ${pcRole!!.label}", Modifier.fillMaxWidth().padding(horizontal = 12.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // Ojo: nada de "return" temprano dentro de Column (es inline y rompe la recomposición).
         if (editingHost) {
@@ -145,19 +157,23 @@ internal fun RemoteApp(
             ) { server -> editingHost = false; onConnect(server) }
         } else if (musicianMode) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("🎵 Modo músico", Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                TextButton({ setRole("operador"); tab = 0 }) { Text("Soy el operador") }
+                Text(if (pcRole != null) "🎵 ${pcRole.label}" else "🎵 Modo músico", Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                if (!rolesOnPc) TextButton({ setRole("operador"); tab = 0 }) { Text("Soy el operador") }
             }
             Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)) {
                 MusicianView(
-                    client, state, features, scores, sequences, instrument,
+                    client, state, features, scores, sequences, instrument ?: auth?.instrument,
                     onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
-                    canControl = !needsPin, onNeedPin = { musicianWantsPin = true }, prefs = store,
+                    // Con papeles: el director inicia el click y la secuencia; el músico no (y no se le ofrece la clave).
+                    canControl = if (rolesOnPc) pcRole?.can(app.selah.shared.Permission.MUSIC) == true else !needsPin,
+                    onNeedPin = { if (!rolesOnPc) musicianWantsPin = true },
+                    prefs = store, suggestedInstrument = auth?.instrument.takeIf { rolesOnPc },
+                    showControls = !rolesOnPc || pcRole?.can(app.selah.shared.Permission.MUSIC) == true,
                 )
             }
         } else {
             // El PC tiene cosas para los músicos y este celular no ha dicho quién lo usa: se pregunta una vez.
-            if (musicians && role == null) RoleChooser(onOperator = { setRole("operador") }, onMusician = { setRole("musico") })
+            if (!rolesOnPc && musicians && role == null) RoleChooser(onOperator = { setRole("operador") }, onMusician = { setRole("musico") })
             val tabNames = listOf("En pantalla", "Canciones", "Biblia", "Lista", "Más") + if (musicians) listOf("Músicos") else emptyList()
             if (tab >= tabNames.size) tab = 0
             // Desplazable: en celulares angostos las pestañas no parten las palabras.
@@ -739,6 +755,27 @@ private fun RoleChooser(onOperator: () -> Unit, onMusician: () -> Unit) {
                 Button(onMusician, Modifier.weight(1f)) { Text("🎵 Soy músico") }
                 OutlinedButton(onOperator, Modifier.weight(1f)) { Text("Soy el operador") }
             }
+        }
+    }
+}
+
+/** El PC tiene papeles y todavía no aprueba este celular: se dice qué pasa y se puede poner el nombre. */
+@Composable
+private fun WaitingApproval(pcName: String, name: String, onRename: (String) -> Unit, onPin: () -> Unit) {
+    var text by remember { mutableStateOf(name) }
+    Card(Modifier.fillMaxWidth().padding(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Esperando que te den acceso", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "En ${pcName.ifEmpty { "el computador" }}, quien maneja Selah tiene que aprobar este celular (botón «Equipo») y decir si eres " +
+                    "músico, director… Mientras, puedes mirar lo que se proyecta.",
+                fontSize = 14.sp,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(text, { text = it.take(40) }, Modifier.weight(1f), label = { Text("Tu nombre") }, singleLine = true)
+                OutlinedButton({ onRename(text.trim()) }, enabled = text.isNotBlank() && text.trim() != name) { Text("Enviar") }
+            }
+            TextButton(onPin) { Text("Soy el operador: tengo la clave") }
         }
     }
 }

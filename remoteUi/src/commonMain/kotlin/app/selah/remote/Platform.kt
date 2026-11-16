@@ -84,3 +84,16 @@ private val UUID_LIKE = Regex("""^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[
 
 /** Imagen (PNG o JPG) para mostrar, o null si no se puede leer. Para las páginas de las partituras. */
 expect fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap?
+
+/** [bytes] bytes al azar seguros (para el código secreto de este celular). */
+expect fun secureRandomBytes(bytes: Int): ByteArray
+
+/** Nombre del aparato para mostrarlo en el PC ("Pixel 7", "iPhone"). */
+expect fun deviceModel(): String
+
+/** El código de este celular: se crea una vez (al azar) y queda guardado. Con él el PC lo reconoce. */
+fun KeyValueStore.deviceId(): String = get("dispositivo")?.takeIf { it.length >= 16 } ?: run {
+    val id = secureRandomBytes(24).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+    put("dispositivo" to id)
+    id
+}

@@ -82,3 +82,7 @@ class AndroidStore(context: Context) : KeyValueStore {
 actual fun decodeImage(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
     android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
 }.getOrNull()
+
+actual fun secureRandomBytes(bytes: Int): ByteArray = ByteArray(bytes).also { java.security.SecureRandom().nextBytes(it) }
+
+actual fun deviceModel(): String = android.os.Build.MODEL ?: "Android"

@@ -230,7 +230,7 @@ class RemoteClient(private val scope: CoroutineScope) {
                         // descartar órdenes que se acumularon mientras no había conexión
                         while (queue.tryReceive().isSuccess) Unit
                         // Que el PC no repita el texto de todas las diapositivas en cada "Siguiente".
-                        send(Frame.Text(ClientMessage.Hello(listOf(app.selah.shared.FEATURE_KEEP_SLIDES, app.selah.shared.FEATURE_PRESENTATIONS)).encode()))
+                        send(Frame.Text(hello().encode()))
                         val sender = launch { for (m in queue) send(Frame.Text(m.encode())) }
                         // Sincronizar el reloj con el PC: varias idas y vueltas al conectarse y luego de vez en cuando
                         // (se queda la más rápida). Un PC viejo no entiende "ping" y lo ignora.
@@ -304,6 +304,7 @@ class RemoteClient(private val scope: CoroutineScope) {
             val response = http.post("http://${urlHost(host)}:$DEFAULT_PORT/anuncios") {
                 url { parameters.append("nombre", file.name) }
                 header("X-Proyecta-Pin", savedPin(host).orEmpty())
+                deviceId?.let { header("X-Selah-Dispositivo", it) }
                 setBody(object : io.ktor.http.content.OutgoingContent.ReadChannelContent() {
                     override val contentLength: Long? = file.size
                     override fun readFrom(): io.ktor.utils.io.ByteReadChannel = file.open()
@@ -321,19 +322,34 @@ class RemoteClient(private val scope: CoroutineScope) {
     suspend fun scorePageCount(file: String): Int? {
         val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return null
         return runCatching {
-            val text = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura/paginas") { url { parameters.append("nombre", file) } }.bodyAsText()
+            val text = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura/paginas") { url { parameters.append("nombre", file) }; deviceHeaders(host) }.bodyAsText()
             Regex(""""paginas"\s*:\s*(\d+)""").find(text)?.groupValues?.get(1)?.toInt()
         }.getOrNull()
+    }
+
+    /** Para las partituras: quién es este celular (y la clave si la tiene). */
+    private fun io.ktor.client.request.HttpRequestBuilder.deviceHeaders(host: String) {
+        deviceId?.let { header("X-Selah-Dispositivo", it) }
+        savedPin(host)?.let { header("X-Proyecta-Pin", it) }
     }
 
     /** Imagen (PNG) de la página [n] de una partitura, o null. */
     suspend fun scorePage(file: String, n: Int): ByteArray? {
         val host = (_status.value as? ConnectionStatus.Connected)?.host ?: return null
         return runCatching {
-            val r = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura") { url { parameters.append("nombre", file); parameters.append("n", n.toString()) } }
+            val r = http.get("http://${urlHost(host)}:$DEFAULT_PORT/partitura") { url { parameters.append("nombre", file); parameters.append("n", n.toString()) }; deviceHeaders(host) }
             if (r.status.value == 200) r.readRawBytes() else null
         }.getOrNull()
     }
+
+    /** El código secreto de este celular y su nombre (para el equipo del PC). */
+    var deviceId: String? = null
+    var deviceName: String? = null
+
+    private fun hello() = ClientMessage.Hello(listOf(app.selah.shared.FEATURE_KEEP_SLIDES, app.selah.shared.FEATURE_PRESENTATIONS), deviceId, deviceName)
+
+    /** Cambió el nombre: presentarse otra vez para que el PC lo muestre. */
+    fun rename(name: String) { deviceName = name; send(hello()) }
 
     fun clearBibleResults() { _bibleResults.value = null }
 

@@ -217,6 +217,12 @@ private fun TopBar(
             }
         }
         val musicians = LocalMusicians.current
+        // Alguien pide entrar: se nota (y con un clic se aprueba).
+        if (musicians.teamWaiting > 0) {
+            Button(musicians.openTeam, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)) {
+                Text("${musicians.teamWaiting} pide${if (musicians.teamWaiting > 1) "n" else ""} entrar")
+            }
+        } else OutlinedButton(musicians.openTeam) { Text("Equipo") }
         OutlinedButton(musicians.open) { Text("¿Qué usa tu iglesia?") }
         OutlinedButton(onOpenHistory) { Text("Historial") }
         OutlinedButton(onOpenBackgrounds) { Text("Fondos y letra") }

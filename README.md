@@ -163,6 +163,13 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   el modelo en español (40 MB) se descarga la primera vez en `Selah/modelos`.
 - **Partituras que pasan solas**: en el celular del músico la página sigue a la letra; si una página va antes o
   después, se desliza a la correcta una vez y el celular lo recuerda para esa partitura.
+- **Equipo y papeles** (botón "Equipo"): cada celular que se conecta pide entrar y el computador principal le da su
+  papel: **Operador** (todo), **Director de alabanza** (click, secuencias, letra automática, mensajes al escenario),
+  **Músico** (ve su partitura sugerida ★ y las de todos, acordes, letra y click; no cambia nada), **Predicador**
+  (temporizador), **Medios** (nombres para la transmisión, subir anuncios) o **Solo mirar**. El computador rechaza lo que
+  el papel no permite (nadie se salta el suyo). Las partituras solo se entregan a músicos, directores y operadores. Cada
+  celular se reconoce por un código propio (en `Selah/equipo.json` se guarda solo su huella SHA-256). La clave de 4 números
+  sigue sirviendo para entrar como operador (y para el control web y las apps viejas); sin clave en el PC, todos controlan.
 - **Carrusel de anuncios**: en Anuncios, "▶ Carrusel": las imágenes pasan solas cada 5, 8, 15 o 30 segundos
   (antes del culto, en el receso). Siguiente/Anterior cambian de imagen; mostrar otra cosa lo detiene. También
   desde la app y el control web.
