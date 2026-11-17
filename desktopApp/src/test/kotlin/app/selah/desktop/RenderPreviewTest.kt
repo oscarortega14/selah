@@ -38,6 +38,7 @@ class RenderPreviewTest {
             "5-letra-pequena-sin-sombra" to (song to Theme.PRESETS[2].second.copy(fontScale = 0.7f, shadow = false)),
             "6-cuenta-regresiva" to (song.copy(countdownEnd = System.currentTimeMillis() + 300_000, countdownText = "Comenzamos en") to Theme(image = "bg")),
             "7-logo" to (song.copy(logo = true) to Theme(image = "bg", logo = "bg")),
+            "9-biblia-con-version" to (PresentationState("Josué 1:9", listOf(Slide("Josué 1:9", "Esta es mi orden: sé fuerte y valiente. No tengas miedo ni te desanimes, porque el Señor tu Dios está contigo dondequiera que vayas.")), 0, isBible = true, version = "NTV") to Theme.PRESETS[1].second),
             "8-alerta" to (song.copy(alert = "Se busca al dueño del carro de placas ABC123, favor acercarse a la entrada") to Theme.PRESETS[1].second),
         )
         // "¿Qué usa tu iglesia?" con todo encendido, partituras y secuencias.

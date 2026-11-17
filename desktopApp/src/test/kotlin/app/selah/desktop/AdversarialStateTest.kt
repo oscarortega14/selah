@@ -15,6 +15,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -322,11 +323,16 @@ class AdversarialStateTest {
         // Cambiar de traducción con un pasaje en pantalla no lo rompe
         commands.handle(ClientMessage.SelectBible("Dos"))
         checkScreen(screen, "cambio de Biblia")
-        // La lectura "Juan 2:2" está vacía en Uno pero existe en Dos
+        // La lectura "Juan 2:2" está vacía en Uno (quedó unida al 1) pero existe en Dos: en Uno sale el 1, que la trae
         assertNull(commands.handle(ClientMessage.PlanAddBible("Juan 2:2")))
         commands.handle(ClientMessage.SelectBible("Uno"))
-        assertTrue(commands.handle(ClientMessage.PlanGo(0)) != null)
-        assertEquals(-1, plan.current)
+        assertNull(commands.handle(ClientMessage.PlanGo(0)))
+        assertEquals(listOf("Juan 2:1-2"), screen.slides.map { it.label })
+        // Sin versículo antes que la traiga, sí es un error
+        File(dir, "biblia/Tres.json").writeText("""{"name":"Tres","books":[{"name":"Juan","chapters":[["","j2"]]}]}""")
+        library.reload()
+        commands.handle(ClientMessage.SelectBible("Tres"))
+        assertNotNull(commands.handle(ClientMessage.ShowBible("Juan 1:1")))
     }
 
     /** BUG (lógica de BackgroundsWindow.setSongBackground): con una predicación en pantalla se cambia una canción homónima. */

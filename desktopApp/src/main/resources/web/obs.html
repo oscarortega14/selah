@@ -60,7 +60,7 @@ function render() {
   wrap.classList.toggle("hidden", !visible);
   if (!visible) return;
   box.replaceChildren(document.createTextNode(cur.text));
-  if (st.isBible && cur.label) box.appendChild(P.el("span", null, cur.label)).id = "ref";
+  if (st.isBible && cur.label) box.appendChild(P.el("span", null, cur.label + (st.version ? " - " + st.version : ""))).id = "ref";
 }
 P.on("state", render);
 setInterval(render, 1000); // para ocultar/mostrar cuando empieza o termina la cuenta regresiva

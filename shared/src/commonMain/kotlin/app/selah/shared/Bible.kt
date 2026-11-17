@@ -27,8 +27,58 @@ fun oldTestamentIndices(names: List<String>): Set<Int> {
  * Posición del versículo [verse] (1…) entre las diapositivas del capítulo ya proyectado
  * (los versículos vacíos no se proyectan, así que no cuentan).
  */
-fun slideIndexOfVerse(chapter: List<String>, verse: Int): Int =
-    chapter.take(verse - 1).count { it.isNotBlank() }
+fun slideIndexOfVerse(chapter: List<String>, verse: Int): Int {
+    val before = chapter.take(verse - 1).count { it.isNotBlank() }
+    // Un versículo vacío quedó unido al anterior: es la diapositiva de ese.
+    return if (chapter.getOrNull(verse - 1)?.isBlank() == true && before > 0) before - 1 else before
+}
+
+private val KNOWN_ABBREVIATIONS = mapOf(
+    "reina valera 1960" to "RVR1960", "reina valera 1909" to "RV1909", "reina valera 1977" to "RV1977",
+    "reina valera 1995" to "RVR1995", "reina valera actualizada 1989" to "RVA", "reina valera actualizada" to "RVA-2015",
+    "nueva reina valera 1990" to "NRV1990", "reina valera contemporanea" to "RVC", "reina valera gomez" to "RVG",
+    "la biblia de las americas" to "LBLA", "nueva biblia de las americas" to "NBLA", "nueva biblia de los hispanos" to "NBLH",
+    "nueva traduccion viviente" to "NTV", "nueva version internacional" to "NVI", "dios habla hoy" to "DHH",
+    "biblia en lenguaje sencillo" to "BLS", "traduccion en lenguaje actual" to "TLA", "la palabra de dios para todos" to "PDT",
+    "palabra de dios para ti" to "PDPT", "la biblia textual" to "BTX", "biblia de jerusalen" to "BJ",
+    "biblia latinoamericana" to "BL", "version biblia libre" to "VBL", "biblia en espanol sencillo" to "BES",
+    "biblia libre latinoamericana" to "BLL", "biblia libre para el mundo" to "BLM", "nueva biblia viva" to "NBV",
+    "valera 1602 purificada" to "V1602P", "world english bible" to "WEB", "king james version" to "KJV",
+    "berean standard bible" to "BSB", "new international version" to "NIV", "biblia livre" to "BLivre", "nova biblia viva" to "NBV",
+)
+
+private val SMALL_WORDS = setOf("de", "del", "la", "las", "los", "el", "en", "para", "y", "the", "of")
+
+/**
+ * La sigla de una traducción para ponerla junto a la cita ("Josué 1:9 - NTV"): la conocida, o las iniciales
+ * del nombre con su año ("Mi Biblia Nueva 2001" → "MBN2001"). Lo que va entre paréntesis ("(3.ª ed.)") no cuenta.
+ */
+fun bibleAbbreviation(name: String): String {
+    val clean = name.replace(Regex("""\(.*?\)"""), " ").trim()
+    val key = normalizeText(clean).replace('-', ' ').split(' ').filter { it.isNotBlank() }.joinToString(" ")
+    KNOWN_ABBREVIATIONS[key]?.let { return it }
+    val words = clean.split(Regex("""[\s-]+""")).filter { it.isNotBlank() }
+    // Un nombre corto de una palabra ya es sigla ("NVI", "RVR60").
+    if (words.size == 1 && clean.length <= 8) return clean
+    val year = words.lastOrNull { it.all(Char::isDigit) }.orEmpty()
+    val initials = words.filter { w -> w.first().isLetter() && w.lowercase() !in SMALL_WORDS }.joinToString("") { it.first().uppercase() }
+    return (initials + year).ifEmpty { clean.take(8) }
+}
+
+private val VERSE_RANGE = Regex("""^(.*) (\d+):(\d+)(?:-(\d+))?$""")
+
+/**
+ * El texto de [others] (la misma cita en otra traducción) que corresponde al versículo [label] ("Juan 3:16" o
+ * "Génesis 1:1-3" si son versículos unidos): los que empiezan dentro de ese rango, o el que lo trae unido.
+ */
+fun matchingVerses(label: String, others: List<Slide>): String? {
+    fun parse(l: String) = VERSE_RANGE.matchEntire(l)?.destructured?.let { (b, c, v, w) -> Triple("$b $c", v.toInt(), w.toIntOrNull() ?: v.toInt()) }
+    val (place, from, to) = parse(label) ?: return others.firstOrNull { it.label == label }?.text
+    val parsed = others.mapNotNull { o -> parse(o.label)?.let { it to o.text } }.filter { it.first.first == place }
+    val inside = parsed.filter { it.first.second in from..to }
+    if (inside.isNotEmpty()) return inside.joinToString(" ") { it.second }
+    return parsed.firstOrNull { from in it.first.second..it.first.third }?.second
+}
 
 /**
  * Una cita ya interpretada, ej. "1 Corintios 13:4-7".
@@ -139,23 +189,33 @@ class Bible(val name: String, val books: List<Book>) {
 
         val slides = mutableListOf<Slide>()
         var to = 0
+        var shownFrom = from
         for (c in ref.chapter..lastChapter) {
             val verses = book.chapters[c - 1]
-            val start = if (c == ref.chapter) from else 1
             val end = when {
                 c != lastChapter -> verses.size
                 ref.verseTo != null -> ref.verseTo.coerceAtMost(verses.size)
                 ref.verseFrom != null && ref.chapterTo == null -> from // un solo versículo
                 else -> verses.size
             }
-            if (c == lastChapter) to = end
+            var start = if (c == ref.chapter) from else 1
             if (end < start) {
                 if (c == ref.chapter) throw IllegalArgumentException("${book.name} ${ref.chapter}:$from-${ref.verseTo}: el final va antes del inicio")
                 continue
             }
-            // Algunas traducciones dejan versículos vacíos (numeración distinta); no se proyectan.
+            // Versículos unidos (la Lenguaje Sencillo, la Dios Habla Hoy… juntan "1-3" en el 1 y dejan vacíos el 2 y el 3):
+            // si piden uno vacío, se muestra el versículo que lo trae.
+            if (c == ref.chapter) {
+                val holder = joinedInto(verses, start)
+                if (holder != null) { start = holder; shownFrom = holder }
+            }
+            if (c == lastChapter) to = end
+            // Los vacíos sin versículo antes (otra numeración) no se proyectan.
             for (v in start..end) {
-                verses[v - 1].trim().takeIf { it.isNotEmpty() }?.let { slides += Slide("${book.name} $c:$v", it) }
+                val text = verses[v - 1].trim().takeIf { it.isNotEmpty() } ?: continue
+                val last = joinedUntil(verses, v)
+                slides += Slide(if (last > v) "${book.name} $c:$v-$last" else "${book.name} $c:$v", text)
+                if (c == lastChapter) to = maxOf(to, last)
             }
         }
         if (slides.isEmpty()) {
@@ -167,12 +227,26 @@ class Bible(val name: String, val books: List<Book>) {
                 ref.chapterTo != null && ref.verseFrom == null && ref.verseTo == null -> append('-').append(lastChapter)
                 ref.chapterTo != null -> append(':').append(from).append('-').append(lastChapter).append(':').append(to)
                 ref.verseFrom != null -> {
-                    append(':').append(from)
-                    if (to != from) append('-').append(to)
+                    append(':').append(shownFrom)
+                    if (to != shownFrom) append('-').append(to)
                 }
             }
         }
         return title to slides
+    }
+
+    /** Si el versículo [verse] está vacío porque quedó unido al anterior, el número de ese anterior; si no, null. */
+    private fun joinedInto(verses: List<String>, verse: Int): Int? {
+        if (verses.getOrNull(verse - 1)?.isNotBlank() != false) return null
+        val holder = (verse - 1 downTo 1).firstOrNull { verses[it - 1].isNotBlank() } ?: return null
+        return holder.takeIf { joinedUntil(verses, it) >= verse }
+    }
+
+    /** Último versículo que trae el [verse] (él mismo, o hasta donde siguen vacíos si unió varios). */
+    private fun joinedUntil(verses: List<String>, verse: Int): Int {
+        var last = verse
+        while (last < verses.size && verses[last].isBlank()) last++
+        return last
     }
 
     /** Índice de búsqueda (texto normalizado de cada versículo), se arma la primera vez. */

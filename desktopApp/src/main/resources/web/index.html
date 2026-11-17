@@ -395,7 +395,10 @@ function showBible(reference, slide) {
 }
 function addBible(reference) { P.send("plan_add_bible", { reference }); toast(reference + " agregado a la lista"); }
 // Posición del versículo entre las diapositivas (los versículos vacíos no se proyectan). Igual que shared/Bible.kt
-function slideIndexOfVerse(verses, v) { return verses.slice(0, v - 1).filter((t) => t.trim()).length; }
+function slideIndexOfVerse(verses, v) {
+  const before = verses.slice(0, v - 1).filter((t) => t.trim()).length;
+  return !(verses[v - 1] || "x").trim() && before > 0 ? before - 1 : before; // vacío = unido al anterior
+}
 
 function go(book, chapter) {
   nav = { book, chapter };

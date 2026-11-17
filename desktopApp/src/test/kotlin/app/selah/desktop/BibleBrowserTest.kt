@@ -26,6 +26,7 @@ class BibleBrowserTest {
         val chapter = listOf("uno", "", "tres", "cuatro")
         assertEquals(0, slideIndexOfVerse(chapter, 1))
         assertEquals(1, slideIndexOfVerse(chapter, 3)) // el 2 está vacío y no es diapositiva
+        assertEquals(0, slideIndexOfVerse(chapter, 2)) // quedó unido al 1: es la del 1
         assertEquals(2, slideIndexOfVerse(chapter, 4))
     }
 

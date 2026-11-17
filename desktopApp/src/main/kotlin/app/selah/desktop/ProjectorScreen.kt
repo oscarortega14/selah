@@ -109,7 +109,7 @@ fun ProjectorScreen(state: PresentationState, modifier: Modifier = Modifier, loo
                     // (Sin fundido se dibuja directo: un Crossfade de 0 ms deja un cuadro en negro al cambiar.)
                     if (theme.fade && look.frozenTime == null) {
                         androidx.compose.animation.Crossfade(
-                            targetState = ShownSlide(slide.text, slide.label, slide.text2),
+                            targetState = ShownSlide(slide.text, state.labelWithVersion(slide.label), slide.text2),
                             animationSpec = androidx.compose.animation.core.tween(FADE_MILLIS),
                             label = "diapositiva",
                         ) { shown ->
@@ -119,7 +119,7 @@ fun ProjectorScreen(state: PresentationState, modifier: Modifier = Modifier, loo
                         }
                     } else {
                         Box(Modifier.fillMaxSize().padding(bottom = bottom)) {
-                            SlideText(state, slide.text, slide.label, theme, w, h - bottom, slide.text2)
+                            SlideText(state, slide.text, state.labelWithVersion(slide.label), theme, w, h - bottom, slide.text2)
                         }
                     }
                 }

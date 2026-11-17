@@ -35,6 +35,8 @@ data class Theme(
     /** Multiplica el tamaño automático de la letra (0.6 a 1.4). */
     val fontScale: Float = 1f,
     val shadow: Boolean = true,
+    /** Poner la traducción junto a la cita de la Biblia ("Josué 1:9 - NTV"). */
+    val bibleVersion: Boolean = true,
     /** Logo de la iglesia para la pantalla de espera: archivo dentro de Selah/fondos. */
     val logo: String? = null,
 ) {

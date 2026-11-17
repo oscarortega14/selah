@@ -25,7 +25,7 @@ data class SongSummary(
     val lastSung: String? = null,
 )
 
-private val VERSE_LABEL = Regex(""".*\d+:\d+$""")
+private val VERSE_LABEL = Regex(""".*\d+:\d+(-\d+)?$""")
 
 /** Lo que se está proyectando en este momento. */
 @Serializable
@@ -70,7 +70,13 @@ data class PresentationState(
     val carouselSeconds: Int = 0,
     /** Click andando (metrónomo de los músicos), o null. Las apps viejas no lo conocen y lo ignoran. */
     val click: ClickState? = null,
+    /** Sigla de la traducción de los versículos en pantalla ("NTV", o "RVR1960 / NTV" con dos), o "". */
+    val version: String = "",
 ) {
+    /** La cita como se proyecta: con la traducción al lado ("Josué 1:9 - NTV") si es un versículo. */
+    fun labelWithVersion(label: String): String =
+        if (version.isNotEmpty() && VERSE_LABEL.matches(label)) "$label - $version" else label
+
     /** Segundos que lleva el predicador, o null si el temporizador no está andando. */
     fun timerElapsed(now: Long): Long? = timerStart?.let { ((now - it) / 1000).coerceAtLeast(0) }
 

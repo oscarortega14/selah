@@ -357,22 +357,40 @@ class Presenter(
         } catch (e: IllegalArgumentException) {
             return e.message
         }
-        _state.update { it.keepingOverlays(PresentationState(passage.title, withSecond(passage.slides, reference), 0, isBible = true)) }
+        _state.update { it.keepingOverlays(PresentationState(passage.title, withSecond(passage.slides, reference), 0, isBible = true, version = versionShown())) }
         onShown?.invoke(HistoryEntry.Kind.BIBLE, passage.title, passage.title)
         return null
+    }
+
+    /** ¿Se pone la traducción junto a la cita? (opción del tema "Traducción junto a la cita"). */
+    var versionOn: () -> Boolean = { true }
+
+    /** Cambiaron la opción o la Biblia en uso: la cita en pantalla se actualiza sin moverse. */
+    fun refreshVersion() {
+        val v = versionShown()
+        _state.update { s -> if ((s.isBible || s.sermon) && s.version != v) s.copy(version = v) else s }
+    }
+
+    /** Sigla de la traducción en uso (y de la segunda, si hay) para ponerla junto a la cita. */
+    private fun versionShown(): String {
+        if (!versionOn()) return ""
+        val c = library.catalog.value
+        val first = c.bibleName?.let { app.selah.shared.bibleAbbreviation(it) } ?: return ""
+        val second = c.secondBibleName?.takeIf { library.secondBible != null }?.let { app.selah.shared.bibleAbbreviation(it) }
+        return if (second != null && second != first) "$first / $second" else first
     }
 
     /** Si hay segunda traducción, cada versículo lleva también su texto en ella (se emparejan por la cita). */
     private fun withSecond(slides: List<app.selah.shared.Slide>, reference: String): List<app.selah.shared.Slide> {
         val second = library.secondBible ?: return slides
-        val other = runCatching { second.lookup(reference).slides }.getOrNull()?.associate { it.label to it.text } ?: return slides
-        return slides.map { s -> other[s.label]?.let { s.copy(text2 = it) } ?: s }
+        val other = runCatching { second.lookup(reference).slides }.getOrNull() ?: return slides
+        return slides.map { s -> app.selah.shared.matchingVerses(s.label, other)?.let { s.copy(text2 = it) } ?: s }
     }
 
     private fun showSermon(id: String): String? {
         val sermon = library.sermon(id) ?: return "Predicación no encontrada (¿se borró el archivo?)"
         val slides = app.selah.shared.Sermon.expand(sermon, library.bible).slides
-        _state.update { it.keepingOverlays(PresentationState(sermon.title, slides, 0, songId = sermon.id, sermon = true, background = sermon.background)) }
+        _state.update { it.keepingOverlays(PresentationState(sermon.title, slides, 0, songId = sermon.id, sermon = true, background = sermon.background, version = versionShown())) }
         onShown?.invoke(HistoryEntry.Kind.SERMON, sermon.title, sermon.id)
         return null
     }

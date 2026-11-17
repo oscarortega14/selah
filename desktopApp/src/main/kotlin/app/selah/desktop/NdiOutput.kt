@@ -187,7 +187,7 @@ fun LyricsOverlay(state: PresentationState, now: Long = System.currentTimeMillis
                     style = TextStyle(fontSize = size, lineHeight = size * 1.25f, fontWeight = FontWeight.Bold, shadow = outline),
                 )
                 if (state.isBible && cur.label.isNotEmpty()) {
-                    Text(cur.label, color = Color.White, style = TextStyle(fontSize = size * 0.6f, fontWeight = FontWeight.Medium, shadow = outline))
+                    Text(state.labelWithVersion(cur.label), color = Color.White, style = TextStyle(fontSize = size * 0.6f, fontWeight = FontWeight.Medium, shadow = outline))
                 }
             }
         }

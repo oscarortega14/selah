@@ -146,10 +146,13 @@ class BibleTest {
 
         assertFailsWith<IllegalArgumentException> { Bible.fromVpl("GEN 1:1 x\n", "x") }
 
-        // versículo vacío en medio de un rango: se salta
+        // versículo vacío en medio de un rango: quedó unido al anterior ("Job 1:1-2")
         val gap = Bible("g", listOf(Bible.Book("Job", listOf(listOf("uno", "", "tres")))))
         assertEquals(listOf("uno", "tres"), gap.lookup("job 1:1-3").slides.map { it.text })
-        assertFailsWith<IllegalArgumentException> { gap.lookup("job 1:2") }
+        assertEquals(listOf("Job 1:1-2", "Job 1:3"), gap.lookup("job 1:1-3").slides.map { it.label })
+        assertEquals("uno", gap.lookup("job 1:2").slides.single().text)
+        // vacío al comienzo del capítulo: no hay de dónde sacarlo
+        assertFailsWith<IllegalArgumentException> { Bible("g", listOf(Bible.Book("Job", listOf(listOf("", "dos"))))).lookup("job 1:1") }
     }
 
     @Test

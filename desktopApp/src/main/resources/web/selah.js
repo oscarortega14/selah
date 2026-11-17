@@ -76,7 +76,7 @@ const Selah = (() => {
       else if (i === 0) out.push({ label: "Inicio", start: 0 });
     });
     // En una predicación los versículos ("Juan 10:11") no son secciones: solo los puntos.
-    return st.sermon ? out.filter((x) => !/\d+:\d+$/.test(x.label)) : out;
+    return st.sermon ? out.filter((x) => !/\d+:\d+(-\d+)?$/.test(x.label)) : out;
   }
   function currentSection(st) {
     const secs = sections(st);

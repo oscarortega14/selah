@@ -258,6 +258,16 @@ fun BackgroundsWindow(
                             Text("Sombra detrás de la letra", modifier = Modifier.weight(1f))
                             Switch(theme.shadow, { v -> themes.update { it.copy(shadow = v) } })
                         }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Traducción junto a la cita de la Biblia")
+                                Text(
+                                    "Abajo del versículo sale \"Josué 1:9 - NTV\", para saber qué versión se está leyendo.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(theme.bibleVersion, { v -> themes.update { it.copy(bibleVersion = v) } })
+                        }
                         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                         Text(
                             "Los cambios se ven al instante en el videobeam. \"Pantalla negra\" sigue siendo negro total.",

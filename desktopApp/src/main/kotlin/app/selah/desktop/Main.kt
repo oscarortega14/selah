@@ -81,6 +81,7 @@ fun main() {
     Log.info("Pantallas: " + Screens.list().joinToString { it.label } + " · VLC: " + if (VideoBackgrounds.available) "sí" else "no")
     val discovery = DiscoveryResponder().also { runCatching { it.start() } }
     val themes = ThemeStore(File(library.baseDir, "tema.json"))
+    presenter.versionOn = { themes.theme.value.bibleVersion }
 
     application {
         val state by presenter.state.collectAsState()
@@ -105,6 +106,11 @@ fun main() {
                 kotlinx.coroutines.delay(50)
                 presenter.tick()
             }
+        }
+        // La traducción junto a la cita sigue a la opción del tema y a la Biblia en uso.
+        LaunchedEffect(Unit) {
+            kotlinx.coroutines.flow.combine(themes.theme, library.catalog) { t, c -> Triple(t.bibleVersion, c.bibleName, c.secondBibleName) }
+                .collect { presenter.refreshVersion() }
         }
         // Anuncios copiados a mano a la carpeta: aparecen solos.
         LaunchedEffect(Unit) {

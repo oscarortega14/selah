@@ -60,6 +60,13 @@ Para más: pestaña Biblia → **＋ Más Biblias…**
 Quedan en la carpeta `biblia/` y se usan sin internet; los celulares las ven solas. Agregar una no cambia
 la que está en pantalla: se elige con "Usar" o en "Traducción". Los libros deuterocanónicos se saltan.
 
+Abajo del versículo sale la cita con la traducción al lado ("Josué 1:9 - NTV"; con dos traducciones,
+"RVR1960 / NTV"). Se apaga en Fondos y letra → "Traducción junto a la cita de la Biblia". La sigla sale del
+nombre de la Biblia (las conocidas: RVR1960, NTV, LBLA, DHH, BLS…; las demás, sus iniciales y año).
+
+Versículos unidos: algunas traducciones (Lenguaje Sencillo, Dios Habla Hoy…) juntan varios versículos en uno
+y dejan vacíos los demás. Si piden uno vacío, sale el que lo trae, con la cita completa ("Génesis 1:1-3").
+
 Formato JSON:
 
 ```json
