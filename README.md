@@ -63,6 +63,8 @@ la que está en pantalla: se elige con "Usar" o en "Traducción". Los libros deu
 Abajo del versículo sale la cita con la traducción al lado ("Josué 1:9 - NTV"; con dos traducciones,
 "RVR1960 / NTV"). Se apaga en Fondos y letra → "Traducción junto a la cita de la Biblia". La sigla sale del
 nombre de la Biblia (las conocidas: RVR1960, NTV, LBLA, DHH, BLS…; las demás, sus iniciales y año).
+Cambiar de traducción con un versículo en pantalla lo pasa a la nueva sin moverse del que se está leyendo
+(si la nueva no trae esa cita, queda la anterior).
 
 Versículos unidos: algunas traducciones (Lenguaje Sencillo, Dios Habla Hoy…) juntan varios versículos en uno
 y dejan vacíos los demás. Si piden uno vacío, sale el que lo trae, con la cita completa ("Génesis 1:1-3").

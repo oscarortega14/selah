@@ -29,6 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
 import java.io.File
@@ -107,10 +109,11 @@ fun main() {
                 presenter.tick()
             }
         }
-        // La traducción junto a la cita sigue a la opción del tema y a la Biblia en uso.
+        // Cambiar de Biblia (o la opción de la sigla) con un versículo en pantalla: pasa a la traducción nueva.
         LaunchedEffect(Unit) {
             kotlinx.coroutines.flow.combine(themes.theme, library.catalog) { t, c -> Triple(t.bibleVersion, c.bibleName, c.secondBibleName) }
-                .collect { presenter.refreshVersion() }
+                .distinctUntilChanged().drop(1)
+                .collect { withContext(Dispatchers.IO) { presenter.refreshVersion() } }
         }
         // Anuncios copiados a mano a la carpeta: aparecen solos.
         LaunchedEffect(Unit) {

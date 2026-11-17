@@ -71,8 +71,22 @@ private val VERSE_RANGE = Regex("""^(.*) (\d+):(\d+)(?:-(\d+))?$""")
  * El texto de [others] (la misma cita en otra traducción) que corresponde al versículo [label] ("Juan 3:16" o
  * "Génesis 1:1-3" si son versículos unidos): los que empiezan dentro de ese rango, o el que lo trae unido.
  */
+private fun parseVerseLabel(l: String) =
+    VERSE_RANGE.matchEntire(l)?.destructured?.let { (b, c, v, w) -> Triple("$b $c", v.toInt(), w.toIntOrNull() ?: v.toInt()) }
+
+/**
+ * Dónde quedó el versículo [label] entre [slides] (la misma lectura en otra traducción): la diapositiva que lo trae,
+ * o la siguiente que exista. null si no está.
+ */
+fun slideIndexForVerseLabel(label: String, slides: List<Slide>): Int? {
+    val (place, from, _) = parseVerseLabel(label) ?: return slides.indexOfFirst { it.label == label }.takeIf { it >= 0 }
+    val parsed = slides.map { parseVerseLabel(it.label) }
+    parsed.indexOfFirst { it != null && it.first == place && from in it.second..it.third }.takeIf { it >= 0 }?.let { return it }
+    return parsed.indexOfFirst { it != null && it.first == place && it.second > from }.takeIf { it >= 0 }
+}
+
 fun matchingVerses(label: String, others: List<Slide>): String? {
-    fun parse(l: String) = VERSE_RANGE.matchEntire(l)?.destructured?.let { (b, c, v, w) -> Triple("$b $c", v.toInt(), w.toIntOrNull() ?: v.toInt()) }
+    fun parse(l: String) = parseVerseLabel(l)
     val (place, from, to) = parse(label) ?: return others.firstOrNull { it.label == label }?.text
     val parsed = others.mapNotNull { o -> parse(o.label)?.let { it to o.text } }.filter { it.first.first == place }
     val inside = parsed.filter { it.first.second in from..to }

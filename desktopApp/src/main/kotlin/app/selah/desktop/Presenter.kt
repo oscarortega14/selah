@@ -357,6 +357,7 @@ class Presenter(
         } catch (e: IllegalArgumentException) {
             return e.message
         }
+        bibleReference = reference
         _state.update { it.keepingOverlays(PresentationState(passage.title, withSecond(passage.slides, reference), 0, isBible = true, version = versionShown())) }
         onShown?.invoke(HistoryEntry.Kind.BIBLE, passage.title, passage.title)
         return null
@@ -365,10 +366,37 @@ class Presenter(
     /** ¿Se pone la traducción junto a la cita? (opción del tema "Traducción junto a la cita"). */
     var versionOn: () -> Boolean = { true }
 
-    /** Cambiaron la opción o la Biblia en uso: la cita en pantalla se actualiza sin moverse. */
+    /** La cita que pidieron para la lectura en pantalla (para volver a buscarla si cambian de Biblia). */
+    @Volatile private var bibleReference: String? = null
+
+    /**
+     * Cambiaron la Biblia en uso, la segunda o la opción de la sigla: la lectura (o predicación) en pantalla pasa
+     * a la traducción nueva sin moverse del versículo que se está leyendo.
+     */
     fun refreshVersion() {
         val v = versionShown()
-        _state.update { s -> if ((s.isBible || s.sermon) && s.version != v) s.copy(version = v) else s }
+        _state.update { s ->
+            when {
+                s.isBible -> {
+                    val reference = bibleReference
+                    val passage = reference?.let { r -> library.bible?.let { b -> runCatching { b.lookup(r) }.getOrNull() } }
+                    if (passage == null || reference == null) {
+                        // No está en la nueva (otra numeración, sin ese libro…): queda la de antes, con su sigla.
+                        s
+                    } else {
+                        val slides = withSecond(passage.slides, reference)
+                        val index = s.current?.let { app.selah.shared.slideIndexForVerseLabel(it.label, slides) } ?: s.index
+                        s.copy(title = passage.title, slides = slides, index = index.coerceIn(-1, slides.lastIndex), version = v)
+                    }
+                }
+                s.sermon -> {
+                    val sermon = s.songId?.let { library.sermon(it) } ?: return@update s.copy(version = v)
+                    val slides = app.selah.shared.Sermon.expand(sermon, library.bible).slides
+                    s.copy(slides = slides, index = s.index.coerceIn(-1, slides.lastIndex), version = v)
+                }
+                else -> s
+            }
+        }
     }
 
     /** Sigla de la traducción en uso (y de la segunda, si hay) para ponerla junto a la cita. */

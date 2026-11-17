@@ -60,6 +60,34 @@ class BibleVersionLabelTest {
     }
 
     @Test
+    fun changingTheBibleWithAVerseOnScreenSwitchesTheText() {
+        File(dir, "biblia/Reina-Valera 1960.json").writeText(
+            """{"name":"Reina-Valera 1960","books":[{"name":"Josué","chapters":[["Mira que te mando.","Esfuérzate.","Sé valiente."]]}]}""",
+        )
+        library.reload()
+        library.selectBible("Reina-Valera 1960")
+        presenter.handle(ClientMessage.ShowBible("Josué 1:1-3"))
+        presenter.handle(ClientMessage.Next)
+        presenter.handle(ClientMessage.Next)
+        assertEquals("Sé valiente.", st.current!!.text)
+        // A la NTV: no trae el 3; queda en el que sigue existiendo más cerca (el último)
+        library.selectBible("Nueva Traducción Viviente")
+        presenter.refreshVersion()
+        assertEquals("NTV", st.version)
+        assertEquals(listOf("Uno.", "Dos."), st.slides.map { it.text })
+        assertEquals("Dos.", st.current!!.text)
+        // A la Lenguaje Sencillo estando en el 2: queda en "Josué 1:1-2", que lo trae
+        library.selectBible("Biblia en Lenguaje Sencillo")
+        presenter.refreshVersion()
+        assertEquals("Josué 1:1-2 - BLS", st.labelWithVersion(st.current!!.label))
+        // De vuelta a la RVR1960 desde ahí: el 1
+        library.selectBible("Reina-Valera 1960")
+        presenter.refreshVersion()
+        assertEquals("Mira que te mando.", st.current!!.text)
+        assertEquals("RVR1960", st.version)
+    }
+
+    @Test
     fun aJoinedVerseShowsTheVerseThatHasIt() {
         library.selectBible("Biblia en Lenguaje Sencillo")
         assertNull(presenter.handle(ClientMessage.ShowBible("Josué 1:2")))
