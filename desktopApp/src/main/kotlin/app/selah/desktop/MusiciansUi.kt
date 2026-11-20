@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -95,7 +96,13 @@ fun churchTabs(c: ChurchFeatures): List<ChurchTab> = buildList {
 
 /** El contenido de la ventana (aparte, para poder dibujarlo en las pruebas). [start]: la pestaña abierta al comienzo. */
 @Composable
-fun MusiciansContent(m: Musicians, devices: List<String> = remember { JavaSoundSequenceOutput.devices() }, start: ChurchTab = ChurchTab.FEATURES) {
+fun MusiciansContent(
+    m: Musicians,
+    devices: List<String> = remember { JavaSoundSequenceOutput.devices() },
+    start: ChurchTab = ChurchTab.FEATURES,
+    /** Solo para las pruebas: una canción que aparece como si se estuviera escuchando su grabación. */
+    busy: Pair<String, String>? = null,
+) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 val c = m.church
@@ -120,7 +127,7 @@ fun MusiciansContent(m: Musicians, devices: List<String> = remember { JavaSoundS
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             when (tab) {
                                 ChurchTab.FEATURES -> FeaturesTab(m)
-                                ChurchTab.AUTO -> AutoLyricsTab(m)
+                                ChurchTab.AUTO -> AutoLyricsTab(m, busy)
                                 ChurchTab.SEQUENCES -> SequencesSection(m, devices)
                                 ChurchTab.SCORES -> ScoresSection(m)
                                 ChurchTab.CHORDS -> ChordsHelp()
@@ -149,7 +156,7 @@ private fun FeaturesTab(m: Musicians) {
 
 /** Letra automática: qué hace falta y cómo sacarlo de un video o audio de la canción. */
 @Composable
-private fun AutoLyricsTab(m: Musicians) {
+private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
     Text(
         "Para que la letra pase sola, Selah tiene que saber en qué tiempo del click cambia cada diapositiva. Lo más fácil: " +
             "dale un video o un audio de cómo se toca la canción (por ejemplo, el de YouTube de tu iglesia). Selah saca el tempo, " +
@@ -177,8 +184,8 @@ private fun AutoLyricsTab(m: Musicians) {
         Text("En este equipo no se puede sacar la letra de una grabación.", color = MaterialTheme.colorScheme.error)
         return
     }
-    var status by remember { mutableStateOf<String?>(null) }
-    var running by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf(busy?.second) }
+    var running by remember { mutableStateOf(busy?.first) }
     var query by remember { mutableStateOf("") }
     // Cambia cuando se guardan tiempos, para volver a leer el estado de cada canción.
     var done by remember { mutableStateOf(0) }
@@ -188,7 +195,8 @@ private fun AutoLyricsTab(m: Musicians) {
             "a varios minutos por canción, según el computador. Lo que saca queda como «sugerido»: revísalo en un ensayo.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+    // Mientras trabaja, lo que va haciendo sale junto a la canción; arriba queda el resultado.
+    if (running == null) status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
     androidx.compose.material3.OutlinedTextField(
         query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción") },
         modifier = Modifier.fillMaxWidth().marksTyping(),
@@ -196,19 +204,27 @@ private fun AutoLyricsTab(m: Musicians) {
     val shown = remember(query, m.songs) { if (query.isBlank()) m.songs else m.songs.search(query) }
     shown.take(60).forEach { s ->
         val state = remember(s.id, done, m.suggested) { m.autoState(s.id) }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        val busy = running == s.id
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Mientras Selah escucha la grabación de esta canción: una rueda girando junto a ella y lo que va haciendo.
+            if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
             Column(Modifier.weight(1f)) {
-                Text(s.title)
+                Text(s.title, fontWeight = if (busy) FontWeight.Bold else null)
                 Text(
-                    state ?: "Sin tiempos",
+                    if (busy) status ?: "Empezando…" else state ?: "Sin tiempos",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (state != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = when {
+                        busy -> MaterialTheme.colorScheme.tertiary
+                        state != null -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
             if (s.id in m.suggested) TextButton({ status = m.undoSuggestion(s.id) ?: "Listo: «${s.title}» quedó como estaba"; done++ }, Modifier.hand(), enabled = running == null) { Text("Deshacer") }
             OutlinedButton({
                 val file = pickFile("Video o audio de «${s.title}»", RecordingAudio.EXTENSIONS) ?: return@OutlinedButton
                 running = s.id
+                status = null
                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     runCatching { recording.run(s.id, file) { st -> status = st } }
                         .onSuccess { o -> status = "Listo: «${s.title}» a ${o.bpm} BPM, ${o.order.joinToString(", ")}. Pruébala en un ensayo." }

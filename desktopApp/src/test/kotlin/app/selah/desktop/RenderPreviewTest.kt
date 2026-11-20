@@ -64,6 +64,10 @@ class RenderPreviewTest {
                 File(outDir, "10-que-usa-tu-iglesia-${tab.name.lowercase()}.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
             }
         }
+        // Escuchando la grabación de una canción: la rueda junto a ella.
+        ImageComposeScene(820, 820, Density(1f)) { MusiciansContent(musicians, devices = emptyList(), start = ChurchTab.AUTO, busy = "Sublime gracia" to "Escuchando la letra…") }.use { scene ->
+            File(outDir, "10-que-usa-tu-iglesia-auto-escuchando.png").writeBytes(scene.render(500).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        }
         // Ventana "Equipo": uno pidiendo entrar y el equipo aprobado.
         val teamDir = kotlin.io.path.createTempDirectory("equipo").toFile()
         val team = TeamStore(File(teamDir, "equipo.json"))
