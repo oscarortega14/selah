@@ -191,7 +191,7 @@ setInterval(tick, 1000); tick();
 let audio = null, scheduled = new Set(), clickKey = "";
 function clickBeat(c) { return (Date.now() + S.serverOffset - c.startAt) / (60000 / c.bpm); }
 function frame() {
-  const c = S.state.click;
+  const c = S.state.click && !S.state.click.lyricsOnly ? S.state.click : null; // la letra sola no es un click
   $("clickBar").style.display = c ? "flex" : "none";
   if (c) {
     const b = clickBeat(c), whole = Math.floor(b), phase = b - whole;
@@ -209,7 +209,7 @@ requestAnimationFrame(frame);
 // Sonido (Web Audio): cada "toc" se programa con su hora exacta, con medio segundo de anticipación.
 function scheduleClicks() {
   const c = S.state.click;
-  if (!audio || !c) return;
+  if (!audio || !c || c.audible === false) return; // sin sonido: letra sola o secuencia sin tempo
   const key = c.startAt + "/" + c.bpm + "/" + c.beatsPerBar;
   if (key !== clickKey) { clickKey = key; scheduled = new Set(); }
   const beatMs = 60000 / c.bpm, nowServer = Date.now() + S.serverOffset;

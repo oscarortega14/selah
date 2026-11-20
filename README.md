@@ -166,6 +166,10 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   "En otro aparato: Selah solo la sigue". Con "▶ Secuencia" (en el PC o el celular del director) Selah lleva el tiempo
   sin sonar; la letra y las partituras van solas, y "◀ Antes / Después ▶" corrige si se adelantan o atrasan. Con
   **"Escuchar el click"** (el click entra por una entrada de audio del PC) arranca solo al oírlo y se mantiene alineado.
+- **Quién da el click**: con "Solo el director de alabanza da el click" (encendido de entrada), el click que suena en los
+  audífonos lo inician, cambian y paran solo los celulares con papel "Director de alabanza". En el computador (y con la
+  clave de operador) se pone **"▶ Letra automática"**: lleva la cuenta sin que suene nada; si el director ya dio el click,
+  la letra va con su click. En los dos casos, pasar la diapositiva a mano reacomoda la letra sin cortar lo automático.
 - **Letra automática desde un video o audio** ("¿Qué usa tu iglesia?" → pestaña "Letra automática", con el click encendido):
   se le da a Selah un video o audio de cómo se toca la canción (MP4, MOV, M4A, MP3 o WAV) y saca el tempo (`BPM:`),
   las vueltas (`Orden:`) y en qué tiempo del click cambia cada diapositiva (`Tiempos:`, marcados como sugeridos; "Deshacer"

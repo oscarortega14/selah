@@ -148,6 +148,17 @@ private fun FeaturesTab(m: Musicians) {
     )
     val c = m.church
     FeatureSwitch("Click para los músicos", "Metrónomo en los celulares con audífonos (nunca en los parlantes) y letra que pasa sola.", c.click) { on -> m.update { it.copy(click = on) } }
+    if (c.click) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+        Checkbox(c.clickByDirector, { on -> m.update { it.copy(clickByDirector = on) } }, Modifier.hand())
+        Column(Modifier.weight(1f)) {
+            Text("Solo el director de alabanza da el click")
+            Text(
+                "Desde su celular (apruébalo en Equipo con el papel «Director de alabanza»). Aquí y con la clave de operador solo " +
+                    "se pone la letra automática, sin sonido.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
     FeatureSwitch("Secuencias", "Selah reproduce el audio de cada canción y la letra lo sigue sola.", c.sequences) { on -> m.update { it.copy(sequences = on) } }
     FeatureSwitch("Partituras", "Cada músico ve en su celular la partitura de su instrumento de la canción en pantalla.", c.scores) { on -> m.update { it.copy(scores = on) } }
     FeatureSwitch("Acordes", "Los músicos ven la letra con acordes en el celular y pueden cambiar el tono.", c.chords) { on -> m.update { it.copy(chords = on) } }
@@ -167,9 +178,9 @@ private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("En el culto", fontWeight = FontWeight.Bold)
             Text(
-                "1. Pon la canción en pantalla.  2. Dale «♩ Click para los músicos» cuando el baterista empiece a contar: Selah también " +
-                    "cuenta un compás y la canción empieza en su «compás 1».  3. La banda toca con el click a ese tempo (el de los " +
-                    "celulares o el de la consola) y la letra pasa sola. Si se descuadra o repiten una parte, pasa tú a la diapositiva " +
+                "1. Pon la canción en pantalla.  2. Si el director ya dio el click, la letra va sola con él. Si no (o el click es el de " +
+                    "la consola), dale «▶ Letra automática» cuando el baterista empiece a contar: Selah cuenta un compás, sin sonido, y la " +
+                    "canción empieza en su «compás 1».  3. La banda toca a ese tempo y la letra pasa sola. Si se descuadra o repiten una parte, pasa tú a la diapositiva " +
                     "que va: la letra sigue sola desde ahí. Para llevarla toda a mano, «Pausar».",
                 style = MaterialTheme.typography.bodySmall,
             )

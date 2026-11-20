@@ -43,7 +43,7 @@ class RenderPreviewTest {
         )
         // "¿Qué usa tu iglesia?" con todo encendido, partituras y secuencias.
         val musicians = Musicians(
-            church = ChurchFeatures.ALL.copy(splitClick = true),
+            church = ChurchFeatures.ALL.copy(splitClick = true, clickByDirector = true),
             catalog = MusicCatalog(
                 scores = listOf(app.selah.shared.ScoreRef("Gracia admirable", "Bajo", "a"), app.selah.shared.ScoreRef("Gracia admirable", "Teclado", "b"), app.selah.shared.ScoreRef("Sublime gracia", app.selah.shared.GENERAL_INSTRUMENT, "c")),
                 scoreOrphans = listOf("Cancion mal escrita - Bajo.pdf"),

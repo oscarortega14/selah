@@ -24,7 +24,7 @@ class WelcomeTest {
         // Cada función opcional de "¿Qué usa tu iglesia?" se puede elegir en la guía
         var c = ChurchFeatures(congregation = false)
         for (s in WIZARD_STEPS.mapNotNull { it.toggle }) c = s.set(c, true)
-        assertEquals(ChurchFeatures.ALL, c)
+        assertEquals(ChurchFeatures.ALL.copy(clickByDirector = true), c) // el asistente no toca quién da el click
     }
 
     @Test

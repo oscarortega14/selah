@@ -49,7 +49,10 @@ fun ClickBar(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (hasSequence) Button({ send(ClientMessage.StartSequence) }, Modifier.weight(1f).hand()) { Text("▶ Secuencia") }
             if (church.click) {
-                OutlinedButton({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).hand()) { Text("♩ Click para los músicos") }
+                // Letra automática sin sonido: la pone el de audiovisuales. El click que suena, si la iglesia lo quiere así,
+                // lo da solo el director desde su celular.
+                OutlinedButton({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0, lyricsOnly = true)) }, Modifier.weight(1f).hand()) { Text("▶ Letra automática") }
+                if (!church.clickByDirector) OutlinedButton({ send(ClientMessage.StartClick(bpm = tempo.toIntOrNull() ?: 0)) }, Modifier.weight(1f).hand()) { Text("♩ Click para los músicos") }
                 OutlinedTextField(tempo, { v -> tempo = v.filter { it.isDigit() }.take(3) }, placeholder = { Text("BPM") }, singleLine = true, modifier = Modifier.width(80.dp).marksTyping())
             }
         }
@@ -65,14 +68,20 @@ fun ClickBar(
             Box(Modifier.size(18.dp).clip(CircleShape).background(color.copy(alpha = 0.15f + 0.85f * glow)))
             val where = when {
                 click.waiting -> "esperando el click…"
-                !click.audible -> sequenceClock(beat)
+                !click.audible && !click.lyricsOnly -> sequenceClock(beat)
                 whole < 0 -> "cuenta"
                 else -> click.barAndBeat(whole).let { (b, t) -> "compás $b · $t" }
             }
             val seq = click.sequence
-            val head = if (seq != null) "▶ ${seq.substringBeforeLast('.')}" + (if (click.audible) " · ♩ ${click.bpm}" else "") else "♩ ${click.bpm}"
+            val head = when {
+                seq != null -> "▶ ${seq.substringBeforeLast('.')}" + (if (click.audible) " · ♩ ${click.bpm}" else "")
+                click.lyricsOnly -> "Letra automática · ${click.bpm} BPM"
+                church.clickByDirector -> "♩ ${click.bpm} · click del director"
+                else -> "♩ ${click.bpm}"
+            }
             Text("$head · $where", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1)
-            if (click.sequence == null) {
+            // El click del director no se toca desde aquí; la letra sí (pasar la diapositiva la reacomoda).
+            if (click.sequence == null && !(church.clickByDirector && !click.lyricsOnly)) {
                 TextButton({ send(ClientMessage.SetTempo(click.bpm - 1)) }, Modifier.hand()) { Text("−") }
                 TextButton({ send(ClientMessage.SetTempo(click.bpm + 1)) }, Modifier.hand()) { Text("+") }
                 TextButton({ send(ClientMessage.StopClick) }, Modifier.hand()) { Text("■") }

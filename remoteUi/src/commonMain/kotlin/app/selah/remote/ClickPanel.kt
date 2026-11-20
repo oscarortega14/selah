@@ -119,6 +119,11 @@ fun ClickPanel(
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (click.audible) FilterChip(listening, { listening = !listening }, { Text(if (listening) "🎧 Sonando aquí" else "🎧 Escuchar aquí", maxLines = 1) }, Modifier.weight(1f))
+                    else if (click.lyricsOnly) {
+                        Text("Solo la letra automática: no suena", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // El director da el click encima: la letra sigue con él.
+                        if (controls) Button({ act(ClientMessage.StartClick()) }) { Text("♩ Dar el click") }
+                    }
                     else Text("Sin BPM: la secuencia no tiene click", Modifier.weight(1f), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (controls && sequence == null) {
                         OutlinedButton({ act(ClientMessage.SetTempo(click.bpm - 1)) }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text("−", fontSize = 18.sp) }
@@ -167,7 +172,7 @@ private fun androidx.compose.foundation.layout.RowScope.BeatPulse(click: ClickSt
     val label = when {
         click.waiting -> "Esperando el click…"
         // Sin BPM se cuentan segundos: "1:23".
-        !click.audible -> whole.coerceAtLeast(0).let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
+        !click.audible && !click.lyricsOnly -> whole.coerceAtLeast(0).let { "${it / 60}:${(it % 60).toString().padStart(2, '0')}" }
         whole < 0 -> "Cuenta ${click.countIn + whole + 1}"
         else -> click.barAndBeat(whole).let { (bar, b) -> "Compás $bar · $b" }
     }

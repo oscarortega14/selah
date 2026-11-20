@@ -71,7 +71,11 @@ class Presenter(
         // Con el carrusel andando, Siguiente/Anterior pasan de imagen (y el tiempo vuelve a empezar).
         ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { manualMove { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
         ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { manualMove { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
-        is ClientMessage.StartClick -> if (_state.value.click?.sequence != null) "Ya suena la secuencia: el click va con ella" else startClick(msg.bpm, msg.beatsPerBar)
+        is ClientMessage.StartClick -> when {
+            _state.value.click?.sequence != null -> "Ya suena la secuencia: el click va con ella"
+            msg.lyricsOnly && _state.value.click?.let { !it.lyricsOnly } == true -> "El director ya dio el click: la letra va con él"
+            else -> startClick(msg.bpm, msg.beatsPerBar, msg.lyricsOnly)
+        }
         ClientMessage.StopClick, ClientMessage.StopSequence -> { stopClickAndSequence(); null }
         ClientMessage.StartSequence -> startSequence()
         is ClientMessage.SequenceNudge -> nudgeSequence(msg.ms)
@@ -244,7 +248,7 @@ class Presenter(
     /** Grabando: diapositiva → tiempo en que apareció. */
     private val recorded = mutableMapOf<Int, Int>()
 
-    private fun startClick(bpmWanted: Int, beatsWanted: Int): String? {
+    private fun startClick(bpmWanted: Int, beatsWanted: Int, lyricsOnly: Boolean = false): String? {
         val s = _state.value
         val song = s.songId?.takeIf { !s.isBible && !s.sermon }?.let { library.song(it) }
         val bpm = bpmWanted.takeIf { it > 0 } ?: song?.bpm ?: return "Escribe el tempo (BPM) o ponlo en la canción con la línea \"BPM: 72\""
@@ -255,7 +259,13 @@ class Presenter(
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         // Un compás de cuenta, y un momento para que la orden llegue a todos los celulares antes.
         val start = clock() + CLICK_LEAD_MS + Math.round(beats * 60_000.0 / bpm)
-        _state.update { it.copy(click = ClickState(bpm, beats, start, countIn = beats, auto = hasTiming, hasTiming = hasTiming, suggested = hasTiming && song?.timingSuggested == true)) }
+        _state.update {
+            it.copy(click = ClickState(
+                bpm, beats, start, countIn = beats, auto = hasTiming, hasTiming = hasTiming, suggested = hasTiming && song?.timingSuggested == true,
+                // Solo la letra: los celulares no suenan (audible = false lo entienden también las apps viejas).
+                audible = !lyricsOnly, lyricsOnly = lyricsOnly,
+            ))
+        }
         return null
     }
 

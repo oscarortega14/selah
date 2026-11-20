@@ -134,6 +134,23 @@ class ClickTest {
     }
 
     @Test
+    fun lyricsOnlyDoesNotSoundAndTheDirectorClickTakesOver() {
+        File(dir, "canciones/Con tempo.txt").writeText("# Con tempo\nBPM: 120\nTiempos: 0 8 16 24\n\nuno\n\ndos\n\ntres\n\ncuatro\n")
+        library.reload()
+        presenter.handle(ClientMessage.SelectSong("Con tempo"))
+        assertNull(presenter.handle(ClientMessage.StartClick(lyricsOnly = true)))
+        assertTrue(click.lyricsOnly)
+        assertFalse(click.audible) // ningún celular suena
+        assertTrue(click.auto)
+        goToBeat(8.0); assertEquals(1, st.index)
+        // Con el click de los músicos andando, la letra sola no lo reemplaza
+        presenter.handle(ClientMessage.StartClick())
+        assertFalse(click.lyricsOnly)
+        assertTrue(click.audible)
+        assertEquals("El director ya dio el click: la letra va con él", presenter.handle(ClientMessage.StartClick(lyricsOnly = true)))
+    }
+
+    @Test
     fun changingSongWhileRecordingSavesWhatWasRecorded() {
         presenter.handle(ClientMessage.SelectSong("Con tempo"))
         presenter.handle(ClientMessage.StartClick())

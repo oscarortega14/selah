@@ -41,6 +41,9 @@ class RolesTest {
     private lateinit var team: TeamStore
     private lateinit var music: MusicLibrary
     private lateinit var server: RemoteServer
+    private val church = MutableStateFlow(ChurchFeatures.ALL)
+    private lateinit var commands: Commands
+    private val click get() = commands.presenter.state.value.click
     private val port = ServerSocket(0).use { it.localPort }
     private val juan = "juan-celular-0123456789abcdef"
     private val ana = "ana-celular-0123456789abcdef"
@@ -56,7 +59,8 @@ class RolesTest {
         for (i in listOf("Bajo", "Piano")) PDDocument().use { d -> d.addPage(PDPage(PDRectangle.A4)); d.save(File(music.scoresDir, "A - $i.pdf")) }
         music.refresh(library.catalog.value.songs)
         team = TeamStore(File(dir, "equipo.json"))
-        server = RemoteServer(Commands.create(library), library, port, pin = MutableStateFlow("4321"), church = MutableStateFlow(ChurchFeatures.ALL), music = music, team = team)
+        commands = Commands.create(library)
+        server = RemoteServer(commands, library, port, pin = MutableStateFlow("4321"), church = church, music = music, team = team)
         server.start()
     }
 
@@ -78,6 +82,46 @@ class RolesTest {
                 else -> null
             }
         }
+    }
+
+    @Test
+    fun onlyTheDirectorGivesTheClickWhenTheChurchWantsIt() = runBlocking {
+        church.value = ChurchFeatures.ALL.copy(clickByDirector = true)
+        val client = HttpClient(CIO) { install(WebSockets) }
+        withTimeout(20_000) {
+            // Audiovisuales, con la clave: la letra automática sí, el click que suena no.
+            client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
+                say(ClientMessage.Login("4321"))
+                until { it is ServerMessage.Auth && it.ok }
+                assertNull(refused(ClientMessage.SelectSong("A")))
+                assertEquals(RemoteServer.DIRECTOR_CLICK, refused(ClientMessage.StartClick(90)))
+                assertNull(refused(ClientMessage.StartClick(lyricsOnly = true)))
+                assertTrue(click!!.lyricsOnly)
+                assertFalse(click!!.audible) // no suena en ningún celular
+                assertNull(refused(ClientMessage.SetTempo(118))) // es solo la letra: se puede ajustar
+            }
+            // El director da el click encima de la letra sola; la letra sigue con su click.
+            client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
+                say(ClientMessage.Hello(deviceId = ana, deviceName = "Ana"))
+                team.approve(TeamStore.hash(ana), Role.DIRECTOR, null)
+                until { it is ServerMessage.Auth && it.role == Role.DIRECTOR }
+                assertNull(refused(ClientMessage.StartClick(100)))
+                assertTrue(click!!.audible)
+                assertFalse(click!!.lyricsOnly)
+                assertEquals(100, click!!.bpm)
+            }
+            // Con el click del director andando, audiovisuales no lo cambia ni lo para, ni lo tapa con la letra sola.
+            client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
+                say(ClientMessage.Login("4321"))
+                until { it is ServerMessage.Auth && it.ok }
+                assertEquals(RemoteServer.DIRECTOR_CLICK, refused(ClientMessage.SetTempo(90)))
+                assertEquals(RemoteServer.DIRECTOR_CLICK, refused(ClientMessage.StopClick))
+                assertEquals(RemoteServer.DIRECTOR_CLICK, refused(ClientMessage.StartClick(lyricsOnly = true)))
+                // Pero sí acomoda la letra
+                assertNull(refused(ClientMessage.Next))
+            }
+        }
+        client.close()
     }
 
     @Test

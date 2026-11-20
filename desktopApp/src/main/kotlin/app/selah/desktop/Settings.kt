@@ -70,10 +70,15 @@ data class ChurchFeatures(
     val listenClick: Boolean = false,
     /** Entrada de audio donde llega el click (nombre); null = la del sistema. */
     val listenDevice: String? = null,
+    /**
+     * El click que suena en los audífonos lo da solo el director de alabanza (desde su celular). El computador y la clave
+     * de operador solo ponen la letra automática, sin sonido.
+     */
+    val clickByDirector: Boolean = true,
 ) {
     companion object {
         /** Todo encendido (las pruebas y quien quiera verlo todo). */
-        val ALL = ChurchFeatures(click = true, sequences = true, scores = true, chords = true, congregation = true)
+        val ALL = ChurchFeatures(click = true, sequences = true, scores = true, chords = true, congregation = true, clickByDirector = false)
     }
 }
 

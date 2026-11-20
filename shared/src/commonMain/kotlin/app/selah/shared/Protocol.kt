@@ -149,10 +149,11 @@ sealed interface ClientMessage {
     /**
      * Click (metrónomo) para los músicos: suena en los celulares con audífonos, nunca en el PC.
      * [bpm] 0 = el de la canción en pantalla (línea "BPM:"); [beatsPerBar] 0 = el de la canción (o 4).
-     * Solo para un PC que dice [FEATURE_CLICK].
+     * Solo para un PC que dice [FEATURE_CLICK]. [lyricsOnly] = solo la letra automática: lleva la cuenta sin que suene
+     * nada en ningún celular (lo usa el de audiovisuales cuando el click lo da el director).
      */
     @Serializable @SerialName("click_start")
-    data class StartClick(val bpm: Int = 0, val beatsPerBar: Int = 0) : ClientMessage
+    data class StartClick(val bpm: Int = 0, val beatsPerBar: Int = 0, val lyricsOnly: Boolean = false) : ClientMessage
 
     @Serializable @SerialName("click_stop")
     data object StopClick : ClientMessage

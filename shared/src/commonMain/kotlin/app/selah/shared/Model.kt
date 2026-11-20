@@ -146,6 +146,8 @@ data class ClickState(
     val waiting: Boolean = false,
     /** Los tiempos de la letra los sugirió Selah (voz guía): hay que revisarlos. */
     val suggested: Boolean = false,
+    /** Solo la letra automática: no es el click de los músicos (no suena en ningún lado; [audible] va en false). */
+    val lyricsOnly: Boolean = false,
 ) {
     val beatMs: Double get() = 60_000.0 / bpm
 

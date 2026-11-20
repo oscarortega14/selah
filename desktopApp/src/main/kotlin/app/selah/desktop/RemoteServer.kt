@@ -380,6 +380,11 @@ class RemoteServer(
                             send(Frame.Text(reply.encode()))
                             continue
                         }
+                        // El click que suena en los audífonos lo da solo el director (si la iglesia lo quiere así).
+                        if (church.value.clickByDirector && role != app.selah.shared.Role.DIRECTOR && touchesBandClick(msg)) {
+                            send(Frame.Text(ServerMessage.Error(DIRECTOR_CLICK).encode()))
+                            continue
+                        }
                         commands.handle(msg)?.let { err -> send(Frame.Text(ServerMessage.Error(err).encode())) }
                     }
                 } finally {
@@ -391,7 +396,20 @@ class RemoteServer(
         }
     }
 
+    /** Iniciar, cambiar o parar el click que suena en los celulares (no la letra automática sola, ni la secuencia). */
+    private fun touchesBandClick(msg: ClientMessage): Boolean {
+        val c = presenter.state.value.click
+        val bandClick = c != null && c.sequence == null && !c.lyricsOnly
+        return when (msg) {
+            is ClientMessage.StartClick -> !msg.lyricsOnly || bandClick
+            is ClientMessage.SetTempo, ClientMessage.StopClick -> bandClick
+            else -> false
+        }
+    }
+
     companion object {
+        const val DIRECTOR_CLICK = "El click de los músicos lo da el director de alabanza desde su celular"
+
         /** Cabecera HTTP con el código del celular (partituras, subir anuncios). */
         const val DEVICE_HEADER = "X-Selah-Dispositivo"
 
