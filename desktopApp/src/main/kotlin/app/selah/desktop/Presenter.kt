@@ -77,6 +77,8 @@ class Presenter(
         is ClientMessage.SequenceNudge -> nudgeSequence(msg.ms)
         is ClientMessage.SetTempo -> if (_state.value.click?.sequence != null) "El tempo lo lleva la secuencia" else setTempo(msg.bpm)
         is ClientMessage.SetAutoLyrics -> {
+            // "Retomar": vuelve a donde va la música, sin el ajuste a mano.
+            if (msg.on) lyricShift = 0.0
             _state.update { s -> s.click?.let { c -> s.copy(click = c.copy(auto = msg.on && c.hasTiming && !c.recording && followsThisSong(s))) } ?: s }
             followClick(); null
         }
@@ -158,6 +160,7 @@ class Presenter(
         // Sin BPM no hay click: los "tiempos" de la letra automática cuentan segundos (60 por minuto).
         val bpm = knownBpm ?: 60
         clickTiming = song.timing
+        lyricShift = 0.0
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         val gen = ++sequenceGen
         sequenceSongId = song.id
@@ -236,6 +239,8 @@ class Presenter(
     // --- Click de los músicos y letra automática ---
     /** "Tiempos:" de la canción con el click andando (para la letra automática). */
     private var clickTiming: List<Int> = emptyList()
+    /** Cuánto se corrió la letra automática (en tiempos) porque el operador la ajustó a mano; el click sigue igual. */
+    private var lyricShift = 0.0
     /** Grabando: diapositiva → tiempo en que apareció. */
     private val recorded = mutableMapOf<Int, Int>()
 
@@ -246,6 +251,7 @@ class Presenter(
         if (bpm !in CLICK_MIN_BPM..CLICK_MAX_BPM) return "El tempo debe ser de $CLICK_MIN_BPM a $CLICK_MAX_BPM BPM"
         val beats = beatsWanted.takeIf { it in 1..16 } ?: song?.beatsPerBar ?: 4
         clickTiming = song?.timing.orEmpty()
+        lyricShift = 0.0
         val hasTiming = usableTiming(clickTiming) && clickTiming.size <= s.slides.size
         // Un compás de cuenta, y un momento para que la orden llegue a todos los celulares antes.
         val start = clock() + CLICK_LEAD_MS + Math.round(beats * 60_000.0 / bpm)
@@ -265,15 +271,28 @@ class Presenter(
         return null
     }
 
-    /** Un cambio de diapositiva a mano: pausa la letra automática (no le pelea al operador) o queda grabado. */
+    /**
+     * Un cambio de diapositiva a mano. Grabando: queda grabado. Con la letra automática andando: si la diapositiva tiene
+     * tiempo, la letra se corre a ese punto y sigue sola desde ahí (se descuadró, o repitieron una parte); el click de los
+     * músicos no cambia. Si no tiene tiempo, la letra automática se pausa y sigue el operador.
+     */
     private fun manualMove(change: (PresentationState) -> PresentationState) {
         _state.update { s ->
             val moved = change(s)
             val c = s.click ?: return@update moved
-            if (c.recording) {
-                if (moved.index != s.index && moved.index >= 0) recorded[moved.index] = Math.round(c.beatAt(clock())).toInt().coerceAtLeast(0)
-                moved
-            } else moved.copy(click = c.copy(auto = false))
+            val at = clickTiming.getOrNull(moved.index) ?: -1
+            when {
+                c.recording -> {
+                    if (moved.index != s.index && moved.index >= 0) recorded[moved.index] = Math.round(c.beatAt(clock())).toInt().coerceAtLeast(0)
+                    moved
+                }
+                moved.index == s.index -> moved
+                c.auto && at >= 0 && followsThisSong(s) -> {
+                    lyricShift = at - c.beatAt(clock())
+                    moved
+                }
+                else -> moved.copy(click = c.copy(auto = false))
+            }
         }
     }
 
@@ -311,7 +330,7 @@ class Presenter(
         val s = _state.value
         val c = s.click ?: return
         if (!c.auto || c.recording || c.waiting || !followsThisSong(s)) return
-        val target = autoSlide(clickTiming, c.beatAt(clock())) ?: return
+        val target = autoSlide(clickTiming, c.beatAt(clock()) + lyricShift) ?: return
         if (target != s.index && target in s.slides.indices) _state.update { it.copy(index = target) }
     }
 

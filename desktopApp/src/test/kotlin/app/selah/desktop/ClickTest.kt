@@ -96,13 +96,41 @@ class ClickTest {
         goToBeat(-2.0); assertEquals(0, st.index) // la cuenta
         goToBeat(7.6); assertEquals(1, st.index) // medio tiempo antes del 8
         goToBeat(16.0); assertEquals(2, st.index)
-        // El operador toca algo a mano: la letra automática se pausa y no le pelea
+        // "Pausar": el operador sigue a mano y la letra no le pelea
+        presenter.handle(ClientMessage.SetAutoLyrics(false))
         presenter.handle(ClientMessage.Prev)
         assertFalse(click.auto)
         goToBeat(30.0); assertEquals(1, st.index)
         // "Retomar": salta a donde va la música
         presenter.handle(ClientMessage.SetAutoLyrics(true))
         assertEquals(3, st.index)
+    }
+
+    @Test
+    fun aManualMoveRealignsTheLyricsAndTheyKeepGoing() {
+        File(dir, "canciones/Con tempo.txt").writeText("# Con tempo\nBPM: 120\nTiempos: 0 8 16 24\n\nuno\n\ndos\n\ntres\n\ncuatro\n")
+        library.reload()
+        presenter.handle(ClientMessage.SelectSong("Con tempo"))
+        presenter.handle(ClientMessage.StartClick())
+        val start = click.startAt
+        goToBeat(9.0); assertEquals(1, st.index)
+        // La banda repitió "dos": en el tiempo 18 el operador vuelve a "dos". La letra no se pausa: sigue desde ahí.
+        goToBeat(18.0); assertEquals(2, st.index)
+        presenter.handle(ClientMessage.Prev)
+        assertEquals(1, st.index)
+        assertTrue(click.auto)
+        goToBeat(20.0); assertEquals(1, st.index) // no salta de vuelta a "tres"
+        goToBeat(25.6); assertEquals(2, st.index) // 8 tiempos después de volver a "dos" (medio tiempo antes)
+        goToBeat(33.6); assertEquals(3, st.index)
+        // El click de los músicos no se movió
+        assertEquals(start, click.startAt)
+        // Se adelantaron: el operador pasa a la siguiente antes y la letra sigue desde ahí
+        presenter.handle(ClientMessage.Prev); goToBeat(34.0); assertEquals(2, st.index)
+        presenter.handle(ClientMessage.Next); assertEquals(3, st.index)
+        goToBeat(40.0); assertEquals(3, st.index)
+        // "Retomar" vuelve a donde va la música, sin el ajuste
+        presenter.handle(ClientMessage.SetAutoLyrics(true))
+        goToBeat(41.0); assertEquals(3, st.index)
     }
 
     @Test

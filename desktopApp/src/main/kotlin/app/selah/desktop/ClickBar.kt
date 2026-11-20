@@ -89,6 +89,10 @@ fun ClickBar(
             click.recording -> Button({ send(ClientMessage.RecordTiming(false)) }, Modifier.fillMaxWidth().hand()) { Text("● Grabando tiempos · Terminar") }
             click.hasTiming && click.auto -> Column {
                 TextButton({ send(ClientMessage.SetAutoLyrics(false)) }, Modifier.hand()) { Text("Letra automática ✓ · Pausar") }
+                Text(
+                    "Si se descuadra, pasa tú a la diapositiva que va: sigue sola desde ahí.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (click.suggested) TextButton({ send(ClientMessage.RecordTiming(true)) }, Modifier.hand()) {
                     Text("Tiempos sugeridos por Selah: si algo va mal, ● Grabar tiempos", style = MaterialTheme.typography.bodySmall)
                 }

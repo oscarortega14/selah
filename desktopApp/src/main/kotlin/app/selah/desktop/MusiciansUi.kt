@@ -169,7 +169,8 @@ private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
             Text(
                 "1. Pon la canción en pantalla.  2. Dale «♩ Click para los músicos» cuando el baterista empiece a contar: Selah también " +
                     "cuenta un compás y la canción empieza en su «compás 1».  3. La banda toca con el click a ese tempo (el de los " +
-                    "celulares o el de la consola) y la letra pasa sola. Si tocas algo a mano, la letra automática se pausa y sigues tú.",
+                    "celulares o el de la consola) y la letra pasa sola. Si se descuadra o repiten una parte, pasa tú a la diapositiva " +
+                    "que va: la letra sigue sola desde ahí. Para llevarla toda a mano, «Pausar».",
                 style = MaterialTheme.typography.bodySmall,
             )
             Text(

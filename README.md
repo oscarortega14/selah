@@ -147,8 +147,9 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   parlantes). Cada celular genera su propio click con el reloj sincronizado con el PC (precisión típica ±5 ms en
   Wi-Fi). La vista de escenario muestra el pulso y también puede sonar. Tempo con la línea `BPM: 72` y `Compás: 4/4`.
 - **Letra automática con el click**: con el click andando, "● Grabar tiempos" anota en qué tiempo cambia cada estrofa
-  (línea `Tiempos:` en la canción). Desde ahí la letra pasa sola, medio tiempo antes; si el operador toca algo a mano
-  se pausa ("▶ Retomar" vuelve a seguir la música).
+  (línea `Tiempos:` en la canción). Desde ahí la letra pasa sola, medio tiempo antes; si se descuadra o repiten una
+  parte, el operador pasa a la diapositiva que va y la letra sigue sola desde ahí (el click de los músicos no cambia);
+  "Pausar" la deja a mano y "▶ Retomar" vuelve a seguir la música.
 - **"¿Qué usa tu iglesia?"** (botón arriba): interruptores para el click, las secuencias, las partituras, los acordes y
   la letra en el celular de la congregación. Lo apagado no aparece ni en el PC ni en la app. Letra y Biblia van siempre.
 - **Modo músico en la app**: al conectarse, la app pregunta "¿Quién usa este celular?". El músico (sin clave) ve la
