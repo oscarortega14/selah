@@ -14,17 +14,19 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,38 +76,78 @@ fun MusiciansWindow(m: Musicians, onClose: () -> Unit) {
     }
 }
 
-/** El contenido de la ventana (aparte, para poder dibujarlo en las pruebas). */
+/** Pestañas de la ventana: la de los interruptores y una por cada cosa encendida que tiene ajustes. */
+enum class ChurchTab(val title: String) { FEATURES("Qué se usa"), SEQUENCES("Secuencias"), SCORES("Partituras"), CHORDS("Acordes") }
+
+/** Las pestañas que se ven: lo apagado no tiene pestaña. */
+fun churchTabs(c: ChurchFeatures): List<ChurchTab> = buildList {
+    add(ChurchTab.FEATURES)
+    if (c.sequences) add(ChurchTab.SEQUENCES)
+    if (c.scores) add(ChurchTab.SCORES)
+    if (c.chords) add(ChurchTab.CHORDS)
+}
+
+/** El contenido de la ventana (aparte, para poder dibujarlo en las pruebas). [start]: la pestaña abierta al comienzo. */
 @Composable
-fun MusiciansContent(m: Musicians, devices: List<String> = remember { JavaSoundSequenceOutput.devices() }) {
+fun MusiciansContent(m: Musicians, devices: List<String> = remember { JavaSoundSequenceOutput.devices() }, start: ChurchTab = ChurchTab.FEATURES) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Letra y Biblia van siempre. Enciende solo lo que tu iglesia usa: lo apagado no aparece ni aquí ni en los celulares.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    val c = m.church
-                    FeatureSwitch("Click para los músicos", "Metrónomo en los celulares con audífonos (nunca en los parlantes) y letra que pasa sola.", c.click) { on -> m.update { it.copy(click = on) } }
-                    FeatureSwitch("Secuencias", "Selah reproduce el audio de cada canción y la letra lo sigue sola.", c.sequences) { on -> m.update { it.copy(sequences = on) } }
-                    FeatureSwitch("Partituras", "Cada músico ve en su celular la partitura de su instrumento de la canción en pantalla.", c.scores) { on -> m.update { it.copy(scores = on) } }
-                    FeatureSwitch("Acordes", "Los músicos ven la letra con acordes en el celular y pueden cambiar el tono.", c.chords) { on -> m.update { it.copy(chords = on) } }
-                    FeatureSwitch("Letra en el celular de la congregación", "Código QR en \"Conectar dispositivos\" para seguir la letra.", c.congregation) { on -> m.update { it.copy(congregation = on) } }
-
-                    if (c.scores) { HorizontalDivider(); ScoresSection(m) }
-                    if (c.sequences) { HorizontalDivider(); SequencesSection(m, devices) }
-                    if (c.chords) {
-                        HorizontalDivider()
-                        Text("Acordes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            "En el editor de la canción, escribe cada acorde entre corchetes justo antes de la sílaba: " +
-                                "[G]Cuán grande es [C]Él. En el videobeam sale solo la letra; los músicos los ven en la app (pestaña Músicos) " +
-                                "y en la vista de escenario.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                val c = m.church
+                val tabs = churchTabs(c)
+                var chosen by remember { mutableStateOf(start) }
+                // Si se apaga lo que estaba abierto, se vuelve a la primera.
+                val tab = chosen.takeIf { it in tabs } ?: ChurchTab.FEATURES
+                Column(Modifier.fillMaxSize()) {
+                    if (tabs.size > 1) TabRow(selectedTabIndex = tabs.indexOf(tab)) {
+                        tabs.forEach { t ->
+                            Tab(selected = t == tab, onClick = { chosen = t }, modifier = Modifier.hand()) {
+                                Text(
+                                    t.title, maxLines = 1, style = MaterialTheme.typography.labelLarge,
+                                    color = if (t == tab) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 14.dp),
+                                )
+                            }
+                        }
+                    }
+                    // Cada pestaña con su propio desplazamiento: al cambiar de pestaña se empieza arriba.
+                    key(tab) {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            when (tab) {
+                                ChurchTab.FEATURES -> FeaturesTab(m)
+                                ChurchTab.SEQUENCES -> SequencesSection(m, devices)
+                                ChurchTab.SCORES -> ScoresSection(m)
+                                ChurchTab.CHORDS -> ChordsHelp()
+                            }
+                        }
                     }
                 }
             }
         }
+}
+
+@Composable
+private fun FeaturesTab(m: Musicians) {
+    Text(
+        "Letra y Biblia van siempre. Enciende solo lo que tu iglesia usa: lo apagado no aparece ni aquí ni en los celulares. " +
+            "Lo que tiene ajustes aparece arriba como una pestaña.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val c = m.church
+    FeatureSwitch("Click para los músicos", "Metrónomo en los celulares con audífonos (nunca en los parlantes) y letra que pasa sola.", c.click) { on -> m.update { it.copy(click = on) } }
+    FeatureSwitch("Secuencias", "Selah reproduce el audio de cada canción y la letra lo sigue sola.", c.sequences) { on -> m.update { it.copy(sequences = on) } }
+    FeatureSwitch("Partituras", "Cada músico ve en su celular la partitura de su instrumento de la canción en pantalla.", c.scores) { on -> m.update { it.copy(scores = on) } }
+    FeatureSwitch("Acordes", "Los músicos ven la letra con acordes en el celular y pueden cambiar el tono.", c.chords) { on -> m.update { it.copy(chords = on) } }
+    FeatureSwitch("Letra en el celular de la congregación", "Código QR en \"Conectar dispositivos\" para seguir la letra.", c.congregation) { on -> m.update { it.copy(congregation = on) } }
+}
+
+@Composable
+private fun ChordsHelp() {
+    Text(
+        "En el editor de la canción, escribe cada acorde entre corchetes justo antes de la sílaba: " +
+            "[G]Cuán grande es [C]Él. En el videobeam sale solo la letra; los músicos los ven en la app (pestaña Músicos) " +
+            "y en la vista de escenario.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -122,7 +164,6 @@ private fun FeatureSwitch(title: String, detail: String, on: Boolean, onChange: 
 @Composable
 private fun ScoresSection(m: Musicians) {
     var message by remember { mutableStateOf<String?>(null) }
-    Text("Partituras", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     Text(
         "PDF con el nombre de la canción y el instrumento: «Cuán grande es Él - Bajo.pdf» (o una carpeta por canción con " +
             "«Bajo.pdf», «Teclado.pdf»…). Sin instrumento («Cuán grande es Él.pdf») es para todos.",
@@ -145,7 +186,6 @@ private fun ScoresSection(m: Musicians) {
 private fun SequencesSection(m: Musicians, devices: List<String>) {
     var message by remember { mutableStateOf<String?>(null) }
     val c = m.church
-    Text("Secuencias", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     Text(
         "Un audio por canción, MP3 o WAV, con el nombre de la canción (también sirven nombres como «Aclamad a Dios - 150 BPM - D.wav» " +
             "o «Salmo 23 No Bass.wav»). Con la canción en pantalla, «▶ Secuencia» la hace sonar. Si el audio trae el click a la " +

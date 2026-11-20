@@ -72,7 +72,7 @@ class RealSequencesTest {
         File(dir, "reporte-secuencias.txt").writeText(out.toString())
         // Cómo se ve la ventana con estas secuencias
         val m = Musicians(church = ChurchFeatures(sequences = true), catalog = cat, songTitle = ::title, songs = library.catalog.value.songs)
-        androidx.compose.ui.ImageComposeScene(820, 5200, androidx.compose.ui.unit.Density(1f)) { MusiciansContent(m, devices = emptyList()) }.use { scene ->
+        androidx.compose.ui.ImageComposeScene(820, 5200, androidx.compose.ui.unit.Density(1f)) { MusiciansContent(m, devices = emptyList(), start = ChurchTab.SEQUENCES) }.use { scene ->
             File(dir, "ventana-secuencias.png").writeBytes(scene.render(0).encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)!!.bytes)
         }
     }

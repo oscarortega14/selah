@@ -50,8 +50,11 @@ class RenderPreviewTest {
                 sequences = mapOf("Gracia admirable" to "Gracia admirable.mp3"),
             ),
         )
-        ImageComposeScene(820, 1500, Density(1f)) { MusiciansContent(musicians, devices = listOf("Altavoces del MacBook Pro", "Tarjeta USB")) }.use { scene ->
-            File(outDir, "10-que-usa-tu-iglesia.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        // Una imagen por pestaña: los interruptores, y los ajustes de cada cosa encendida.
+        for (tab in churchTabs(musicians.church)) {
+            ImageComposeScene(820, 820, Density(1f)) { MusiciansContent(musicians, devices = listOf("Altavoces del MacBook Pro", "Tarjeta USB"), start = tab) }.use { scene ->
+                File(outDir, "10-que-usa-tu-iglesia-${tab.name.lowercase()}.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+            }
         }
         // Ventana "Equipo": uno pidiendo entrar y el equipo aprobado.
         val teamDir = kotlin.io.path.createTempDirectory("equipo").toFile()
