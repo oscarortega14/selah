@@ -227,11 +227,17 @@ class JavaSoundSequenceOutput : SequenceOutput {
     }
 }
 
+/** Audio AAC (lo de los videos): se lee con su propio lector. */
+internal val AAC_EXTENSIONS = setOf("mp4", "m4a", "mov", "aac")
+
 /** La música como PCM de 16 bits, intercalado, en su frecuencia original (WAV, o MP3 con mp3spi). */
 internal fun openPcm(file: File): AudioInputStream {
     // WAV con lector propio: el de Java falla con los de 24 bits, coma flotante o con un bloque "JUNK".
     if (file.extension.equals("wav", ignoreCase = true)) return WavReader.open(file)
-    val src = AudioSystem.getAudioInputStream(file)
+    // Video o audio AAC: directo a su lector. Si el de MP3 lo revisa primero, deja el archivo ilegible para el de AAC
+    // ("Resetting to invalid mark"), y el orden en que Java los prueba cambia según el instalador.
+    val src = if (file.extension.lowercase() in AAC_EXTENSIONS) net.sourceforge.jaad.spi.javasound.AACAudioFileReader().getAudioInputStream(file)
+    else AudioSystem.getAudioInputStream(file)
     val f = src.format
     val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
     val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)

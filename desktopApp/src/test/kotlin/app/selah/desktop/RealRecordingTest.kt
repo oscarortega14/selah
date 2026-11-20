@@ -25,9 +25,9 @@ class RealRecordingTest {
         heard.forEach { out.appendLine("%7.2f-%7.2f %s".format(it.start, it.end, it.text)) }
         val sections = RecordingTimings.sections(song)
         out.appendLine("limpias:")
-        LyricsAligner.clean(heard, RecordingAudio.seconds(samples)).forEach { out.appendLine("%7.2f-%7.2f %s".format(it.start, it.end, it.text)) }
+        LyricsAligner.clean(heard, RecordingAudio.seconds(samples), sections.flatMap { it.slides }.flatMap(LyricsAligner::tokens).toSet()).forEach { out.appendLine("%7.2f-%7.2f %s".format(it.start, it.end, it.text)) }
         out.appendLine("diapositivas:")
-        LyricsAligner.entries(LyricsAligner.clean(heard, RecordingAudio.seconds(samples)), sections.flatMap { it.slides }.map(LyricsAligner::tokens))
+        LyricsAligner.entries(LyricsAligner.clean(heard, RecordingAudio.seconds(samples), sections.flatMap { it.slides }.flatMap(LyricsAligner::tokens).toSet()), sections.flatMap { it.slides }.map(LyricsAligner::tokens), sections.flatMap { s -> s.slides.indices.map { it == 0 } })
             .forEach { out.appendLine("  ${it.slide} en %.2f s".format(it.at)) }
         val o = RecordingTimings.outcome(heard, sections, beats, RecordingAudio.seconds(samples))
         out.appendLine("BPM: ${o?.bpm}\nOrden: ${o?.order?.joinToString(", ")}\nTiempos: ${o?.timing?.joinToString(" ")}")

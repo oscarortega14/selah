@@ -50,6 +50,7 @@ dependencies {
     implementation("io.github.givimad:whisper-jni:1.7.1")
     // Audio AAC dentro de .mp4/.m4a (los videos), decodificador puro Java
     implementation("com.tianscar.javasound:javasound-aac:0.9.8")
+    implementation("com.tianscar.javasound:javasound-resloader:0.1.3") // lo usa el lector de AAC (se llama directo)
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-client-cio:$ktor")

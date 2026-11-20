@@ -25,7 +25,7 @@ class RecordingTimings(private val library: Library, private val model: WhisperM
         status("Buscando el pulso…")
         val beats = BeatTracker.track(samples, song.bpm)
             ?: throw IllegalStateException("No encontré el pulso de la canción en la grabación")
-        status("Escuchando la letra (puede tardar un par de minutos)…")
+        status("Escuchando la letra (en un computador sencillo puede tardar varios minutos)…")
         val heard = SungLyrics.hear(samples, model.file, "")
         val outcome = outcome(heard, sections, beats, RecordingAudio.seconds(samples))
             ?: throw IllegalStateException("No reconocí la letra de «${song.title}» en la grabación. ¿Es la misma canción?")

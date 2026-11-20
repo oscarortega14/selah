@@ -184,8 +184,8 @@ private fun AutoLyricsTab(m: Musicians) {
     var done by remember { mutableStateOf(0) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     Text(
-        "La primera vez descarga lo necesario para entender el canto (190 MB, sin internet después). Tarda de unos segundos " +
-            "a un par de minutos por canción. Lo que saca queda como «sugerido»: revísalo en un ensayo.",
+        "La primera vez descarga lo necesario para entender el canto (540 MB, sin internet después). Tarda de unos segundos " +
+            "a varios minutos por canción, según el computador. Lo que saca queda como «sugerido»: revísalo en un ensayo.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }

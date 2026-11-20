@@ -17,16 +17,13 @@ object RecordingAudio {
 
     fun read(file: File): FloatArray {
         val input = runCatching { openPcm(file) }.getOrElse {
-            throw IllegalStateException("No pude leer el audio de «${file.name}». Prueba con un MP4, MP3 o WAV.", it)
+            Log.error("No pude leer el audio de ${file.name}", it)
+            throw IllegalStateException("No pude leer el audio de «${file.name}» (${it.message ?: it.javaClass.simpleName}). Prueba con un MP4, MP3 o WAV.", it)
         }
         input.use { pcm ->
             val rate = pcm.format.sampleRate.toDouble()
             val ch = pcm.format.channels
             val buf = ByteArray(rate.toInt() / 5 * ch * 2)
-            val step = rate / RATE
-            // Antes de bajar a 16 kHz, un promedio corto para que lo agudo no se doble (suficiente para la voz).
-            val avg = maxOf(1, step.toInt())
-            val out = FloatArrayBuilder()
             val mono = FloatArrayBuilder()
             while (true) {
                 val n = pcm.readNBytes(buf, 0, buf.size)
@@ -43,17 +40,36 @@ object RecordingAudio {
             }
             val m = mono.toArray()
             if (m.isEmpty()) throw IllegalStateException("«${file.name}» no tiene audio")
-            var pos = 0.0
-            while (pos < m.size - 1) {
-                val i = pos.toInt()
-                var s = 0f
-                var k = 0
-                for (j in i until minOf(i + avg, m.size)) { s += m[j]; k++ }
-                out.add(s / k)
-                pos += step
-            }
-            return out.toArray()
+            return resample(m, rate)
         }
+    }
+
+    /**
+     * A 16 kHz con un filtro que corta lo que pasa de ~7 kHz (sinc con ventana): sin él, lo agudo se "dobla" y suena a
+     * otra cosa, y Whisper entiende peor la letra.
+     */
+    internal fun resample(x: FloatArray, fromRate: Double): FloatArray {
+        if (fromRate == RATE.toDouble()) return x
+        val step = fromRate / RATE
+        val cutoff = minOf(1.0, RATE / fromRate) * 0.9 // fracción de la mitad de la frecuencia original
+        val half = 16 // muestras de la salida a cada lado (en escala de la entrada: half / cutoff)
+        val reach = (half / cutoff).toInt()
+        val n = ((x.size - 1) / step).toInt() + 1
+        val out = FloatArray(n)
+        for (o in 0 until n) {
+            val center = o * step
+            val c = center.toInt()
+            var s = 0.0
+            var wsum = 0.0
+            for (i in maxOf(0, c - reach + 1)..minOf(x.size - 1, c + reach)) {
+                val d = (i - center) * cutoff
+                val w = (if (d == 0.0) 1.0 else kotlin.math.sin(Math.PI * d) / (Math.PI * d)) *
+                    (0.5 + 0.5 * kotlin.math.cos(Math.PI * (i - center) / (reach + 1)))
+                s += x[i] * w; wsum += w
+            }
+            out[o] = if (wsum != 0.0) (s / wsum).toFloat() else 0f
+        }
+        return out
     }
 
     /** Duración en segundos de [samples] a 16 kHz. */
@@ -71,14 +87,14 @@ internal class FloatArrayBuilder {
 }
 
 /**
- * El modelo de Whisper para entender lo que se canta (whisper.cpp "small" cuantizado, MIT). No viene con Selah: se
- * descarga una vez (190 MB) la primera vez que alguien saca los tiempos de una grabación, y queda en Selah/modelos.
+ * El modelo de Whisper para entender lo que se canta (whisper.cpp "medium" cuantizado, MIT; el "small" se confunde con
+ * los coros que repiten el comienzo de cada línea). No viene con Selah: se descarga una vez (540 MB) la primera vez que alguien saca los tiempos de una grabación, y queda en Selah/modelos.
  */
 class WhisperModelFile(baseDir: File, private val url: String = URL, private val sha256: String = SHA256) {
     val dir = File(baseDir, "modelos")
     val file = File(dir, NAME)
 
-    val ready: Boolean get() = file.isFile && file.length() > 100_000_000
+    val ready: Boolean get() = file.isFile && file.length() > 500_000_000
 
     fun download(progress: (Double) -> Unit) {
         if (ready) return
@@ -89,7 +105,7 @@ class WhisperModelFile(baseDir: File, private val url: String = URL, private val
         c.instanceFollowRedirects = true
         c.setRequestProperty("User-Agent", "Selah")
         if (c.responseCode != 200) throw IllegalStateException("No pude descargar el modelo para entender el canto (${c.responseCode})")
-        val total = c.contentLengthLong.takeIf { it > 0 } ?: 190_000_000L
+        val total = c.contentLengthLong.takeIf { it > 0 } ?: 539_000_000L
         val md = MessageDigest.getInstance("SHA-256")
         c.inputStream.use { input ->
             part.outputStream().use { out ->
@@ -109,9 +125,9 @@ class WhisperModelFile(baseDir: File, private val url: String = URL, private val
     }
 
     companion object {
-        const val NAME = "ggml-small-q5_1.bin"
+        const val NAME = "ggml-medium-q5_0.bin"
         const val URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$NAME"
-        const val SHA256 = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb"
+        const val SHA256 = "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f"
     }
 }
 

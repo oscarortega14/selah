@@ -169,7 +169,7 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   se le da a Selah un video o audio de cómo se toca la canción (MP4, MOV, M4A, MP3 o WAV) y saca el tempo (`BPM:`),
   las vueltas (`Orden:`) y en qué tiempo del click cambia cada diapositiva (`Tiempos:`, marcados como sugeridos; "Deshacer"
   vuelve todo como estaba). En el culto, con el click a ese tempo desde el comienzo de la canción, la letra pasa sola.
-  Entiende el canto con Whisper (whisper.cpp, MIT; el modelo de 190 MB se descarga la primera vez a `Selah/modelos`, sin
+  Entiende el canto con Whisper (whisper.cpp, MIT; el modelo de 540 MB se descarga la primera vez a `Selah/modelos`, sin
   internet después) y encuentra los pulsos de la banda aunque se acelere un poco.
 - **Tiempos con la voz guía**: "Sugerir tiempos" escucha la guía de cada secuencia ("Verso… 1, 2, 3, 4", "Coro",
   "Repetir", "Final") y propone el orden de las secciones y cuándo pasa cada diapositiva (líneas `Orden:`, `Tiempos:`

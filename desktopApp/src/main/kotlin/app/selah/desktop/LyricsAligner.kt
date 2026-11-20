@@ -21,7 +21,9 @@ object LyricsAligner {
 
     fun align(phrases: List<HeardPhrase>, sections: List<Section>, audioSeconds: Double): Result? {
         val slides = sections.flatMap { it.slides }
-        val entries = entries(clean(phrases, audioSeconds), slides.map(::tokens))
+        val first = sections.flatMap { s -> s.slides.indices.map { it == 0 } }
+        val words = slides.map(::tokens)
+        val entries = entries(clean(phrases, audioSeconds, words.flatten().toSet()), words, first)
         if (entries.isEmpty()) return null
         // Diapositiva -> su sección y su lugar en ella.
         val sectionOf = IntArray(slides.size)
@@ -48,24 +50,51 @@ object LyricsAligner {
         return Result(order, starts)
     }
 
-    /** Fuera lo que no es canto: frases inventadas en el instrumental o al final (duran mucho más o menos de lo normal). */
-    internal fun clean(phrases: List<HeardPhrase>, audioSeconds: Double): List<HeardPhrase> {
+    /**
+     * Fuera lo que no es canto: frases inventadas en el instrumental o al final (duran mucho más o menos de lo normal).
+     * Y la primera frase después de la introducción o de un instrumental: Whisper la hace empezar donde terminó lo anterior,
+     * así que se le pone la duración que tiene esa misma frase en otra parte de la canción. [lyrics]: las palabras de la letra.
+     */
+    internal fun clean(phrases: List<HeardPhrase>, audioSeconds: Double, lyrics: Set<String> = emptySet()): List<HeardPhrase> {
         val real = phrases.filter { p -> p.start < audioSeconds - 0.5 && p.end > p.start && tokens(p.text).isNotEmpty() }
             .map { it.copy(end = minOf(it.end, audioSeconds)) }
         if (real.isEmpty()) return real
-        val perChar = real.map { (it.end - it.start) / key(it.text).length.coerceAtLeast(1) }.sorted().let { it[it.size / 2] }
-        val byText = real.groupBy { key(it.text) }
-        val out = mutableListOf<HeardPhrase>()
-        for (p in real) {
-            val same = byText[key(p.text)].orEmpty().filter { it !== p }.map { it.end - it.start }
-            val expected = if (same.size >= 2) same.sorted()[same.size / 2] else key(p.text).length * perChar
-            val ratio = (p.end - p.start) / expected
-            when {
-                ratio < 0.65 -> continue // cortada o inventada (pasa al final del video)
-                ratio > 1.4 && out.lastOrNull()?.let { key(it.text) == key(p.text) } == true -> continue // repite la anterior en el instrumental
-                ratio > 1.4 -> out += p.copy(start = p.end - expected) // empezó antes, en lo instrumental
-                else -> out += p
+        fun isLyric(p: HeardPhrase): Boolean {
+            if (lyrics.isEmpty()) return true
+            val ws = tokens(p.text)
+            return ws.count { w -> w in lyrics || lyrics.any { similarity(w, it) >= 0.75 } } >= ws.size * 0.6
+        }
+        val lyric = real.map(::isLyric)
+        // Viene después de algo que no es letra (introducción, instrumental, saludo) o de un silencio: su comienzo no es fiable.
+        // (Unos segundos entre frases es normal en una canción lenta: solo cuenta un silencio largo.)
+        val afterMusic = real.indices.map { i -> i == 0 || !lyric[i - 1] || real[i].start - real[i - 1].end > 6.0 }
+        // Las duraciones que sirven de medida: frases de la letra cantadas seguidas.
+        val steady = real.indices.filter { lyric[it] && !afterMusic[it] }.map { real[it] }
+        val perChar = (steady.ifEmpty { real }).map { (it.end - it.start) / key(it.text).length.coerceAtLeast(1) }.sorted().let { it[it.size / 2] }
+        val byText = steady.groupBy { key(it.text) }
+        fun same(p: HeardPhrase) = byText[key(p.text)].orEmpty().filter { it !== p }.map { it.end - it.start }
+        fun expected(p: HeardPhrase) = same(p).takeIf { it.isNotEmpty() }?.sorted()?.let { it[it.size / 2] } ?: (key(p.text).length * perChar)
+        // Primero, lo que se va.
+        val keep = BooleanArray(real.size)
+        var lastKept: HeardPhrase? = null
+        for ((i, p) in real.withIndex()) {
+            val ratio = (p.end - p.start) / expected(p)
+            keep[i] = when {
+                // Cortada o inventada (pasa al final del video). Solo comparando con la misma frase: por letras no es fiable.
+                ratio < 0.65 && (same(p).isNotEmpty() || !lyric[i]) -> false
+                ratio > 1.4 && lastKept?.let { key(it.text) == key(p.text) } == true -> false // repite la anterior en el instrumental
+                else -> true
             }
+            if (keep[i]) lastKept = p
+        }
+        val out = mutableListOf<HeardPhrase>()
+        for ((i, p) in real.withIndex()) {
+            if (!keep[i]) continue
+            // Lo que debería durar al paso de la frase cantada vecina (las estrofas suelen ir más lentas que el coro).
+            val near = (i + 1 until real.size).firstOrNull { keep[it] && lyric[it] } ?: (i - 1 downTo 0).firstOrNull { keep[it] && lyric[it] }
+            val byNeighbor = near?.let { n -> key(p.text).length * (real[n].end - real[n].start) / key(real[n].text).length.coerceAtLeast(1) }
+            // Más larga de lo normal: se le pegó lo instrumental de antes (Whisper la empieza donde terminó lo anterior).
+            out += if (lyric[i] && byNeighbor != null && p.end - p.start > byNeighbor * 1.3) p.copy(start = p.end - byNeighbor) else p
         }
         return out
     }
@@ -75,7 +104,7 @@ object LyricsAligner {
      * siguiendo la letra: dentro de una diapositiva se avanza (se perdonan palabras que faltan o sobran) y al terminarla
      * se puede pasar al comienzo de cualquiera (la siguiente, o volver al coro).
      */
-    internal fun entries(phrases: List<HeardPhrase>, slides: List<List<String>>): List<Entry> {
+    internal fun entries(phrases: List<HeardPhrase>, slides: List<List<String>>, startsSection: List<Boolean> = slides.map { true }): List<Entry> {
         val heard = words(phrases)
         if (heard.isEmpty() || slides.none { it.isNotEmpty() }) return emptyList()
         val offset = IntArray(slides.size + 1)
@@ -92,8 +121,9 @@ object LyricsAligner {
         var score = DoubleArray(states) { Double.NEGATIVE_INFINITY }
         val back = Array(n) { IntArray(states) { -1 } }
         for (s in slides.indices) if (slides[s].isNotEmpty()) {
-            score[offset[s]] = emit(offset[s], heard[0].text)
-            if (slides[s].size > 1) score[offset[s] + 1] = MISS + emit(offset[s] + 1, heard[0].text)
+            val order = if (startsSection[s]) 0.0 else OUT_OF_ORDER
+            score[offset[s]] = order + emit(offset[s], heard[0].text)
+            if (slides[s].size > 1) score[offset[s] + 1] = order + MISS + emit(offset[s] + 1, heard[0].text)
         }
         score[garbage] = emit(garbage, heard[0].text)
         for (i in 1 until n) {
@@ -107,6 +137,16 @@ object LyricsAligner {
                 if (prev[st] > anyBest) { anyBest = prev[st]; anyArg = st }
             }
             if (anyArg >= 0 && anyBest + JUMP > exitBest) { exitBest = anyBest + JUMP; exitArg = anyArg }
+            // Dentro de una sección las diapositivas van en orden: la segunda parte del coro viene después de la primera
+            // (en un coro donde todas las líneas empiezan igual, si no, se confunden).
+            val fromPrevious = DoubleArray(slides.size) { Double.NEGATIVE_INFINITY }
+            val fromPreviousArg = IntArray(slides.size) { -1 }
+            for (s in 1 until slides.size) if (!startsSection[s]) {
+                for (st in offset[s - 1] until offset[s]) if (nearEnd(st) && prev[st] + TO_NEW > fromPrevious[s]) { fromPrevious[s] = prev[st] + TO_NEW; fromPreviousArg[s] = st }
+            }
+            fun entry(s: Int): Pair<Double, Int> =
+                if (startsSection[s] || exitBest + OUT_OF_ORDER < fromPrevious[s]) (if (startsSection[s]) exitBest to exitArg else fromPrevious[s] to fromPreviousArg[s])
+                else (exitBest + OUT_OF_ORDER) to exitArg
             val w = heard[i].text
             for (st in 0 until total) {
                 val k = posOf[st]
@@ -115,8 +155,7 @@ object LyricsAligner {
                 if (k >= 1) take(prev[st - 1], st - 1)
                 if (k >= 2) take(prev[st - 2] + MISS, st - 2)
                 take(prev[st] + EXTRA, st)
-                if (k == 0) take(exitBest, exitArg)
-                if (k == 1) take(exitBest + MISS, exitArg)
+                if (k <= 1) { val (v, a) = entry(slideOf[st]); if (a >= 0) take(v + if (k == 1) MISS else 0.0, a) }
                 if (arg >= 0) { cur[st] = best + emit(st, w); back[i][st] = arg }
             }
             run {
@@ -189,4 +228,6 @@ object LyricsAligner {
     private const val TO_NEW = -0.2
     private const val TO_GARBAGE = -0.2
     private const val JUMP = -2.5
+    /** Empezar una diapositiva que no es la primera de su sección sin venir de la anterior. */
+    private const val OUT_OF_ORDER = -1.5
 }

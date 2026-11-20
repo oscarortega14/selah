@@ -70,11 +70,17 @@ class RecordingTimingsTest {
 
     @Test
     fun limpiaLoInventado() {
-        val clean = LyricsAligner.clean(heard, 130.0)
+        val clean = LyricsAligner.clean(heard, 130.0, sections.flatMap { it.slides }.flatMap(LyricsAligner::tokens).toSet())
         // La repetición larga del instrumental y la frase cortada del final se van; el saludo se queda (no es letra: lo ignora la alineación).
         assertFalse(clean.any { it.start == 68.0 })
         assertFalse(clean.any { it.start == 124.0 })
         assertTrue(clean.any { it.start == 0.0 })
+        // Una frase que se alargó con lo instrumental de antes: empieza al paso de la siguiente.
+        val long = LyricsAligner.clean(listOf(
+            p(5.0, 28.0, "Caminamos en la mañana clara buscando tu voz en el viento"),
+            p(28.0, 36.0, "Tu luz alumbra cada paso y llena de paz el corazón"),
+        ), 40.0, sections.flatMap { it.slides }.flatMap(LyricsAligner::tokens).toSet())
+        assertTrue(long.first().start in 18.0..22.0, "empieza en ${long.first().start}")
         // Lo que pasa del final del audio no cuenta.
         assertTrue(LyricsAligner.clean(listOf(p(140.0, 150.0, "Cantaremos")), 130.0).isEmpty())
     }
@@ -159,5 +165,17 @@ class RecordingTimingsTest {
         library.undoSuggestion("Luz del camino")
         assertTrue(library.song("Luz del camino")!!.timing.isEmpty())
         assertTrue("Caminamos en la mañana clara" in File(dir, "canciones/Luz del camino.txt").readText())
+    }
+}
+
+class RecordingAudioTest {
+    @Test
+    fun leeAudioAacAunqueElLectorDeMp3LoRevisePrimero() {
+        val file = File(javaClass.getResource("/tono-2s.m4a")!!.toURI())
+        // Lo que pasaba en el instalador: el de MP3 lo revisa primero y lo deja ilegible por el camino general.
+        runCatching { javazoom.spi.mpeg.sampled.file.MpegAudioFileReader().getAudioInputStream(file) }
+        val samples = RecordingAudio.read(file)
+        assertTrue(abs(RecordingAudio.seconds(samples) - 2.0) < 0.15, "duración ${RecordingAudio.seconds(samples)}")
+        assertTrue(samples.maxOf { abs(it) } > 0.05, "tiene sonido: máximo ${samples.maxOf { abs(it) }}")
     }
 }

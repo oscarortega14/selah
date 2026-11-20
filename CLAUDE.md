@@ -151,7 +151,7 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   Páginas de partitura que siguen la letra en el celular (`pageFor`, correcciones guardadas por partitura).
 - Letra automática desde una grabación (2026-11-20): pestaña "Letra automática" en "¿Qué usa tu iglesia?" (solo con el click;
   la ventana va en pestañas: `ChurchTab`, `churchTabs`). `RecordingAudio.kt` (audio a 16 kHz; AAC de .mp4 con javasound-aac,
-  `openPcm` pasa primero a PCM propio del decodificador), `WhisperModelFile` (ggml-small-q5_1, 190 MB, SHA-256) y `SungLyrics`
+  `openPcm` pasa primero a PCM propio del decodificador), `WhisperModelFile` (ggml-medium-q5_0, 540 MB; el small se confunde, SHA-256) y `SungLyrics`
   (whisper-jni 1.7.1; SIN la letra como pista: con pista Whisper inventa letra en el instrumental), `BeatTracker.kt`
   (flujo espectral + programación dinámica; tiempos en pulsos para que calcen aunque la banda se acelere), `LyricsAligner.kt`
   (limpia frases inventadas por duración; Viterbi palabra a palabra contra la letra, con vueltas), `RecordingTimings.kt`
