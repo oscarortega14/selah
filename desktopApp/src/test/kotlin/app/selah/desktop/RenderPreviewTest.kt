@@ -49,6 +49,14 @@ class RenderPreviewTest {
                 scoreOrphans = listOf("Cancion mal escrita - Bajo.pdf"),
                 sequences = mapOf("Gracia admirable" to "Gracia admirable.mp3"),
             ),
+            songs = listOf(
+                app.selah.shared.SongSummary("Gracia admirable", "Gracia admirable"),
+                app.selah.shared.SongSummary("Luz del camino", "Luz del camino"),
+                app.selah.shared.SongSummary("Sublime gracia", "Sublime gracia"),
+            ),
+            suggested = listOf("Luz del camino"),
+            recording = RecordingTimings(Library(kotlin.io.path.createTempDirectory("vista").toFile()), WhisperModelFile(File("."))),
+            autoState = { id -> mapOf("Gracia admirable" to "72 BPM · con tiempos", "Luz del camino" to "110 BPM · tiempos sugeridos")[id] },
         )
         // Una imagen por pestaña: los interruptores, y los ajustes de cada cosa encendida.
         for (tab in churchTabs(musicians.church)) {

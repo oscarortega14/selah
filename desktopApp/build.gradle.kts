@@ -46,6 +46,10 @@ dependencies {
     implementation("com.googlecode.soundlibs:mp3spi:1.9.5.4")
     // Voz guía de las secuencias ("Coro", "Verso"…) → tiempos sugeridos: reconocimiento de voz sin internet
     implementation("com.alphacephei:vosk:0.3.45")
+    // Letra automática desde una grabación (video o audio de cómo se toca la canción): Whisper, sin internet (MIT/Apache 2.0)
+    implementation("io.github.givimad:whisper-jni:1.7.1")
+    // Audio AAC dentro de .mp4/.m4a (los videos), decodificador puro Java
+    implementation("com.tianscar.javasound:javasound-aac:0.9.8")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-client-cio:$ktor")

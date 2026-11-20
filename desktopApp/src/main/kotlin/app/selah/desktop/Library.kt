@@ -183,6 +183,12 @@ class Library(val baseDir: File) {
         })
     }
 
+    /** Lo que se sacó de una grabación: como [applySuggestion], y además el tempo medido (línea "BPM:"). */
+    fun applyRecording(id: String, bpm: Int, order: List<String>, timing: List<Int>): String {
+        editHeader(id, listOf(BPM_EDIT_LINE to "BPM: $bpm"))
+        return applySuggestion(id, order, timing)
+    }
+
     /** Deshacer la sugerencia: vuelve el Orden de antes y se quitan los tiempos. */
     fun undoSuggestion(id: String): String {
         val old = headerValue(id, OLD_ORDER_LINE)
@@ -545,6 +551,7 @@ class Library(val baseDir: File) {
         private val SUGGESTED_LINE = Regex("""^tiempos\s+sugeridos\s*:.*$""", RegexOption.IGNORE_CASE)
         private val ORDER_EDIT_LINE = Regex("""^orden\s*:.*$""", RegexOption.IGNORE_CASE)
         private val OLD_ORDER_LINE = Regex("""^orden\s+sin\s+secuencia\s*:.*$""", RegexOption.IGNORE_CASE)
+        private val BPM_EDIT_LINE = Regex("""^bpm\s*:.*$""", RegexOption.IGNORE_CASE)
         /** Líneas que van antes de la letra (no se proyectan). */
         private val HEADER_LINES = listOf(TYPE_LINE, TIMING_LINE, SUGGESTED_LINE, Regex("""^(orden|fondo|autor(es)?|ccli|bpm|comp[aá]s|secuencia)\b.*$""", RegexOption.IGNORE_CASE))
         private val SEQUENCE_LINE = Regex("""^secuencia\s*:.*$""", RegexOption.IGNORE_CASE)

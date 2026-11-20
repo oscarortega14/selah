@@ -149,6 +149,16 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   `TimingGuess.kt` (avisos → comienzos, "repetir" repartido parejo, secciones por tipo), `GuideTimings.kt` (+ `VoiceModel`:
   descarga con SHA-256 a `Selah/modelos`), `Library.applySuggestion/undoSuggestion`. Real: 40 de 42 canciones en 98 s.
   Páginas de partitura que siguen la letra en el celular (`pageFor`, correcciones guardadas por partitura).
+- Letra automática desde una grabación (2026-11-20): pestaña "Letra automática" en "¿Qué usa tu iglesia?" (solo con el click;
+  la ventana va en pestañas: `ChurchTab`, `churchTabs`). `RecordingAudio.kt` (audio a 16 kHz; AAC de .mp4 con javasound-aac,
+  `openPcm` pasa primero a PCM propio del decodificador), `WhisperModelFile` (ggml-small-q5_1, 190 MB, SHA-256) y `SungLyrics`
+  (whisper-jni 1.7.1; SIN la letra como pista: con pista Whisper inventa letra en el instrumental), `BeatTracker.kt`
+  (flujo espectral + programación dinámica; tiempos en pulsos para que calcen aunque la banda se acelere), `LyricsAligner.kt`
+  (limpia frases inventadas por duración; Viterbi palabra a palabra contra la letra, con vueltas), `RecordingTimings.kt`
+  (2 tiempos de anticipación; `Library.applyRecording` = BPM + `applySuggestion`). Real ("A cada instante", video de IC Salem):
+  110 BPM, orden correcto, tiempos a ±2 de los hechos a mano, 9 s en la Mac. Vosk NO sirve para canto (5 palabras).
+  Prueba real: `SELAH_REAL_RECORDING=… SELAH_REAL_SONG=… SELAH_REAL_MODEL=… --tests '*RealRecordingTest*'`.
+  Falta: probar en Windows (whisper-jni_full.dll pide VCRUNTIME140/MSVCP140/VCOMP140; si falla, la pestaña lo dice).
 - Equipo y papeles (`shared/Roles.kt`: `Role`, `Permission`, `ClientMessage.requiredPermission()`; `TeamStore.kt` en
   `Selah/equipo.json` con SHA-256 del código del celular; `TeamUi.kt` ventana "Equipo"; `FEATURE_ROLES`). `Hello(deviceId,
   deviceName)` y `Auth(role, instrument, pending)` con valores por defecto (apps viejas: la clave = operador). El servidor

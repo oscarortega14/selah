@@ -62,6 +62,10 @@ data class Musicians(
     /** Canciones con tiempos sugeridos que nadie ha revisado (ids). */
     val suggested: List<String> = emptyList(),
     val undoSuggestion: (songId: String) -> String? = { null },
+    /** Sacar los tiempos de un video o audio de la canción (null = no disponible). */
+    val recording: RecordingTimings? = null,
+    /** Cómo está una canción para la letra automática ("110 BPM · con tiempos"), o null si no tiene tiempos. */
+    val autoState: (songId: String) -> String? = { null },
 ) {
     fun hasSequence(songId: String?): Boolean = church.sequences && songId != null && songId in catalog.sequences
 }
@@ -77,11 +81,13 @@ fun MusiciansWindow(m: Musicians, onClose: () -> Unit) {
 }
 
 /** Pestañas de la ventana: la de los interruptores y una por cada cosa encendida que tiene ajustes. */
-enum class ChurchTab(val title: String) { FEATURES("Qué se usa"), SEQUENCES("Secuencias"), SCORES("Partituras"), CHORDS("Acordes") }
+enum class ChurchTab(val title: String) { FEATURES("Qué se usa"), AUTO("Letra automática"), SEQUENCES("Secuencias"), SCORES("Partituras"), CHORDS("Acordes") }
 
 /** Las pestañas que se ven: lo apagado no tiene pestaña. */
 fun churchTabs(c: ChurchFeatures): List<ChurchTab> = buildList {
     add(ChurchTab.FEATURES)
+    // La letra pasa sola con el click (con secuencia, la voz guía: pestaña Secuencias).
+    if (c.click) add(ChurchTab.AUTO)
     if (c.sequences) add(ChurchTab.SEQUENCES)
     if (c.scores) add(ChurchTab.SCORES)
     if (c.chords) add(ChurchTab.CHORDS)
@@ -114,6 +120,7 @@ fun MusiciansContent(m: Musicians, devices: List<String> = remember { JavaSoundS
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             when (tab) {
                                 ChurchTab.FEATURES -> FeaturesTab(m)
+                                ChurchTab.AUTO -> AutoLyricsTab(m)
                                 ChurchTab.SEQUENCES -> SequencesSection(m, devices)
                                 ChurchTab.SCORES -> ScoresSection(m)
                                 ChurchTab.CHORDS -> ChordsHelp()
@@ -138,6 +145,93 @@ private fun FeaturesTab(m: Musicians) {
     FeatureSwitch("Partituras", "Cada músico ve en su celular la partitura de su instrumento de la canción en pantalla.", c.scores) { on -> m.update { it.copy(scores = on) } }
     FeatureSwitch("Acordes", "Los músicos ven la letra con acordes en el celular y pueden cambiar el tono.", c.chords) { on -> m.update { it.copy(chords = on) } }
     FeatureSwitch("Letra en el celular de la congregación", "Código QR en \"Conectar dispositivos\" para seguir la letra.", c.congregation) { on -> m.update { it.copy(congregation = on) } }
+}
+
+/** Letra automática: qué hace falta y cómo sacarlo de un video o audio de la canción. */
+@Composable
+private fun AutoLyricsTab(m: Musicians) {
+    Text(
+        "Para que la letra pase sola, Selah tiene que saber en qué tiempo del click cambia cada diapositiva. Lo más fácil: " +
+            "dale un video o un audio de cómo se toca la canción (por ejemplo, el de YouTube de tu iglesia). Selah saca el tempo, " +
+            "las vueltas (estrofa, coro, coro…) y los tiempos.",
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("En el culto", fontWeight = FontWeight.Bold)
+            Text(
+                "1. Pon la canción en pantalla.  2. Dale «♩ Click para los músicos» cuando el baterista empiece a contar: Selah también " +
+                    "cuenta un compás y la canción empieza en su «compás 1».  3. La banda toca con el click a ese tempo (el de los " +
+                    "celulares o el de la consola) y la letra pasa sola. Si tocas algo a mano, la letra automática se pausa y sigues tú.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                "Otras formas de tener los tiempos: «● Grabar tiempos» en un ensayo (pasas la letra a mano una vez) o, si usan " +
+                    "secuencias, «Sugerir tiempos» con la voz guía (pestaña Secuencias).",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    val recording = m.recording
+    if (recording == null) {
+        Text("En este equipo no se puede sacar la letra de una grabación.", color = MaterialTheme.colorScheme.error)
+        return
+    }
+    var status by remember { mutableStateOf<String?>(null) }
+    var running by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    // Cambia cuando se guardan tiempos, para volver a leer el estado de cada canción.
+    var done by remember { mutableStateOf(0) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    Text(
+        "La primera vez descarga lo necesario para entender el canto (190 MB, sin internet después). Tarda de unos segundos " +
+            "a un par de minutos por canción. Lo que saca queda como «sugerido»: revísalo en un ensayo.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+    androidx.compose.material3.OutlinedTextField(
+        query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción") },
+        modifier = Modifier.fillMaxWidth().marksTyping(),
+    )
+    val shown = remember(query, m.songs) { if (query.isBlank()) m.songs else m.songs.search(query) }
+    shown.take(60).forEach { s ->
+        val state = remember(s.id, done, m.suggested) { m.autoState(s.id) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(s.title)
+                Text(
+                    state ?: "Sin tiempos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (s.id in m.suggested) TextButton({ status = m.undoSuggestion(s.id) ?: "Listo: «${s.title}» quedó como estaba"; done++ }, Modifier.hand(), enabled = running == null) { Text("Deshacer") }
+            OutlinedButton({
+                val file = pickFile("Video o audio de «${s.title}»", RecordingAudio.EXTENSIONS) ?: return@OutlinedButton
+                running = s.id
+                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { recording.run(s.id, file) { st -> status = st } }
+                        .onSuccess { o -> status = "Listo: «${s.title}» a ${o.bpm} BPM, ${o.order.joinToString(", ")}. Pruébala en un ensayo." }
+                        .onFailure { status = it.message ?: "No se pudo" }
+                    running = null
+                    done++
+                }
+            }, Modifier.hand(), enabled = running == null) {
+                Text(if (running == s.id) "Escuchando…" else "Video o audio…")
+            }
+        }
+    }
+    if (shown.size > 60) Text("…y ${shown.size - 60} más: busca por el nombre.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+/** Elegir un archivo (o null si se cancela). */
+private fun pickFile(title: String, extensions: Set<String>): File? {
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD).apply {
+        setFilenameFilter { _, name -> name.substringAfterLast('.', "").lowercase() in extensions }
+        file = extensions.joinToString(";") { "*.$it" }
+        isVisible = true
+    }
+    return dialog.files?.firstOrNull()
 }
 
 @Composable

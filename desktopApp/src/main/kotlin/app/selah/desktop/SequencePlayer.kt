@@ -235,7 +235,12 @@ internal fun openPcm(file: File): AudioInputStream {
     val f = src.format
     val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
     val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)
-    return if (f.matches(pcm)) src else AudioSystem.getAudioInputStream(pcm, src)
+    if (f.matches(pcm)) return src
+    return runCatching { AudioSystem.getAudioInputStream(pcm, src) }.getOrElse {
+        // El de AAC (videos .mp4) solo sabe pasar a PCM en su propio formato: primero eso y luego al que se usa aquí.
+        val decoded = AudioSystem.getAudioInputStream(AudioFormat.Encoding.PCM_SIGNED, src)
+        if (decoded.format.matches(pcm)) decoded else AudioSystem.getAudioInputStream(pcm, decoded)
+    }
 }
 
 /**

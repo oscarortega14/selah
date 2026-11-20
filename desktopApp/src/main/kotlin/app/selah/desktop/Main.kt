@@ -66,6 +66,7 @@ fun main() {
     refreshMusic()
     commands.church = { settingsStore.value.church }
     val guideTimings = GuideTimings(library, music, VoiceModel(baseDir))
+    val recordingTimings = RecordingTimings(library, WhisperModelFile(baseDir))
     presenter.sequences = SequenceHookup(
         sourceFor = { id -> if (settingsStore.value.church.sequences) music.sourceFor(id) else null },
         output = JavaSoundSequenceOutput(),
@@ -227,6 +228,12 @@ fun main() {
                     guide = guideTimings,
                     suggested = remember(catalog) { catalog.songs.filter { library.song(it.id)?.timingSuggested == true }.map { it.id } },
                     undoSuggestion = { id -> runCatching { library.undoSuggestion(id); null }.getOrElse { it.message ?: "No pude deshacerlo" } },
+                    recording = recordingTimings,
+                    autoState = { id ->
+                        library.song(id)?.takeIf { app.selah.shared.usableTiming(it.timing) }?.let { s ->
+                            listOfNotNull(s.bpm?.let { "$it BPM" }, if (s.timingSuggested) "tiempos sugeridos" else "con tiempos").joinToString(" · ")
+                        }
+                    },
                 )
                 androidx.compose.runtime.CompositionLocalProvider(LocalWorship provides worship, LocalMusicians provides musicians) {
                 OperatorScreen(
