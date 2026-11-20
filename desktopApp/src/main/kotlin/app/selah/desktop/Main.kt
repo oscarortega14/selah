@@ -133,6 +133,7 @@ fun main() {
         var connectOpen by remember { mutableStateOf(false) }
         var historyOpen by remember { mutableStateOf(false) }
         var backupsOpen by remember { mutableStateOf(false) }
+        var transferOpen by remember { mutableStateOf(false) }
         var biblesOpen by remember { mutableStateOf(false) }
         var servicesOpen by remember { mutableStateOf(false) }
         var musiciansOpen by remember { mutableStateOf(false) }
@@ -263,6 +264,7 @@ fun main() {
                     onOpenUpdate = { updateOpen = true },
                     onOpenWelcome = { settingsStore.update { it.copy(welcomeDone = false) } },
                     onOpenBackups = { backupsOpen = true },
+                    onOpenTransfer = { transferOpen = true },
                     onOpenBibles = { biblesOpen = true },
                     lastSung = lastSung,
                     searchBible = { q -> library.bible?.search(q) },
@@ -308,6 +310,16 @@ fun main() {
                         onUse = { name -> scope.launch(Dispatchers.IO) { commands.onSelectBible(name) } },
                         onKeep = { name -> if (settingsStore.value.bible == null) settingsStore.update { it.copy(bible = name) } },
                         onClose = { biblesOpen = false },
+                    )
+                }
+                if (transferOpen) {
+                    TransferDialog(
+                        Transfer(library.baseDir), backups,
+                        onImported = {
+                            library.reload(); refreshMusic(); themes.reloadFromDisk()
+                            commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk(); commands.services?.reloadFromDisk()
+                        },
+                        onClose = { transferOpen = false },
                     )
                 }
                 if (backupsOpen) {

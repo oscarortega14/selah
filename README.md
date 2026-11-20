@@ -166,6 +166,10 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   "En otro aparato: Selah solo la sigue". Con "▶ Secuencia" (en el PC o el celular del director) Selah lleva el tiempo
   sin sonar; la letra y las partituras van solas, y "◀ Antes / Después ▶" corrige si se adelantan o atrasan. Con
   **"Escuchar el click"** (el click entra por una entrada de audio del PC) arranca solo al oírlo y se mantiene alineado.
+- **Llevar a otro computador** (? → "Llevar a otro computador…"): se prepara todo en un computador (canciones con sus
+  tiempos, listas y cultos, partituras, secuencias, diseño y fondos, anuncios, Biblias agregadas, historial; se elige qué)
+  y Selah arma un .zip. En el otro computador, "Abrir un .zip…" → "Traer": lo igual no se toca, lo que cambió se
+  reemplaza (antes hace un respaldo). Lo propio de cada computador (pantallas, clave, sonido, celulares aprobados) no viaja.
 - **Quién da el click**: con "Solo el director de alabanza da el click" (encendido de entrada), el click que suena en los
   audífonos lo inician, cambian y paran solo los celulares con papel "Director de alabanza". En el computador (y con la
   clave de operador) se pone **"▶ Letra automática"**: lleva la cuenta sin que suene nada; si el director ya dio el click,

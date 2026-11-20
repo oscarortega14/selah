@@ -22,6 +22,9 @@ class ThemeStore(private val file: File) {
         }
     }
 
+    /** Lo trajeron de otro computador: volver a leerlo. */
+    fun reloadFromDisk() { _theme.value = load() }
+
     private fun load(): Theme = runCatching {
         ProtocolJson.decodeFromString(Theme.serializer(), file.readText(Charsets.UTF_8)).sanitized()
     }.getOrDefault(Theme())

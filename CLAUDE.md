@@ -159,6 +159,9 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   110 BPM, orden correcto, tiempos a ±2 de los hechos a mano, 9 s en la Mac. Vosk NO sirve para canto (5 palabras).
   Prueba real: `SELAH_REAL_RECORDING=… SELAH_REAL_SONG=… SELAH_REAL_MODEL=… --tests '*RealRecordingTest*'`.
   Falta: probar en Windows (whisper-jni_full.dll pide VCRUNTIME140/MSVCP140/VCOMP140; si falla, la pestaña lo dice).
+- Llevar a otro computador (2026-11-20): `Transfer.kt` (`PARTS`, .zip con la marca `selah-llevar.txt`; audio/video sin
+  comprimir; al traer, solo rutas de las partes conocidas y dentro de la carpeta; lo igual por CRC no se copia) y
+  `TransferDialog.kt` (menú "?"). No viajan ajustes.json, equipo.json, modelos ni respaldos.
 - Click del director (2026-11-20): `ChurchFeatures.clickByDirector` (true por defecto; `ALL` lo trae en false para las
   pruebas). `StartClick(lyricsOnly)` → `ClickState.lyricsOnly` con `audible = false` (las apps viejas no suenan). El servidor
   (`RemoteServer.touchesBandClick`) rechaza iniciar/cambiar/parar el click que suena si el papel no es DIRECTOR

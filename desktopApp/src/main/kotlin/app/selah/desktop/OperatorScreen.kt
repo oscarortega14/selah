@@ -92,6 +92,7 @@ fun OperatorScreen(
     onOpenHistory: () -> Unit = {},
     onOpenWelcome: () -> Unit = {},
     onOpenBackups: () -> Unit = {},
+    onOpenTransfer: () -> Unit = {},
     /** Versión nueva disponible (null = ninguna). */
     updateVersion: String? = null,
     onOpenUpdate: () -> Unit = {},
@@ -140,6 +141,7 @@ fun OperatorScreen(
                 onOpenHistory = onOpenHistory,
                 onOpenWelcome = onOpenWelcome,
                 onOpenBackups = onOpenBackups,
+                onOpenTransfer = onOpenTransfer,
                 updateVersion = updateVersion,
                 onOpenUpdate = onOpenUpdate,
                 onHelp = { helpOpen = true },
@@ -194,6 +196,7 @@ private fun TopBar(
     onOpenHistory: () -> Unit,
     onOpenWelcome: () -> Unit,
     onOpenBackups: () -> Unit,
+    onOpenTransfer: () -> Unit,
     updateVersion: String?,
     onOpenUpdate: () -> Unit,
     onHelp: () -> Unit,
@@ -231,7 +234,7 @@ private fun TopBar(
             Text("Conectar dispositivos")
         }
         ProjectorMenu(projector)
-        HelpMenu(onHelp, onOpenWelcome, onOpenBackups)
+        HelpMenu(onHelp, onOpenWelcome, onOpenBackups, onOpenTransfer)
     }
 }
 
@@ -898,7 +901,7 @@ private fun OpenPlanDialog(
 
 /** "?": atajos, la guía de inicio y los respaldos. */
 @Composable
-private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: () -> Unit) {
+private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: () -> Unit, onTransfer: () -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton({ open = true }) { Text("?", style = MaterialTheme.typography.titleMedium) }
@@ -906,6 +909,7 @@ private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: 
             DropdownMenuItem({ Text("Atajos de teclado") }, { open = false; onShortcuts() }, Modifier.hand())
             DropdownMenuItem({ Text("Guía de inicio") }, { open = false; onWelcome() }, Modifier.hand())
             DropdownMenuItem({ Text("Respaldos…") }, { open = false; onBackups() }, Modifier.hand())
+            DropdownMenuItem({ Text("Llevar a otro computador…") }, { open = false; onTransfer() }, Modifier.hand())
             DropdownMenuItem(
                 { Text("Ver el registro (si algo falló)") },
                 { open = false; Log.current?.takeIf { it.isFile }?.let { f -> runCatching { java.awt.Desktop.getDesktop().open(f) } } },
