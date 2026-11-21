@@ -87,7 +87,10 @@ class Presentations(
     }
 
     /** Olvida las imágenes ya convertidas de [name] (se borró o cambió de nombre). */
-    fun forget(name: String) { File(cacheDir, cacheName(name)).deleteRecursively() }
+    fun forget(name: String) {
+        // Con el mismo candado que la conversión: si justo se está preparando en segundo plano, se espera.
+        synchronized(locks.getOrPut(name) { Any() }) { runCatching { File(cacheDir, cacheName(name)).deleteRecursively() } }
+    }
 
     /** Imagen de la diapositiva [index] (desde 0) si ya está convertida (para dibujarla rápido). */
     fun page(name: String, index: Int): File? =
@@ -119,7 +122,7 @@ class Presentations(
             for (n in names) runCatching { pages(n) }
             // Se borran las conversiones de presentaciones que ya no están.
             val keep = names.map(::cacheName).toSet()
-            cacheDir.listFiles().orEmpty().filter { it.name !in keep }.forEach { it.deleteRecursively() }
+            cacheDir.listFiles().orEmpty().filter { it.name !in keep }.forEach { runCatching { it.deleteRecursively() } }
         }, "presentaciones").apply { isDaemon = true; start() }
     }
 
