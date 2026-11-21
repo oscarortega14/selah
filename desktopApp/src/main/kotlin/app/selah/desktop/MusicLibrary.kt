@@ -203,6 +203,20 @@ class MusicLibrary(baseDir: File) {
         return null
     }
 
+    /** Agrega [pdf] como la partitura de [songId] para [instrument] (null o vacío = para todos). Devuelve un error o null. */
+    @Synchronized
+    fun addScoreFor(pdf: File, songId: String, instrument: String?): String? {
+        if (!pdf.isFile || pdf.extension.lowercase() != "pdf") return "Elige un archivo PDF"
+        val inst = instrument?.trim()?.takeIf { it.isNotEmpty() && !it.equals(GENERAL_INSTRUMENT, ignoreCase = true) }
+        if (inst != null && (inst.contains('/') || inst.contains('\\') || inst.contains(" - "))) return "El instrumento no puede llevar «/» ni « - »"
+        scoresDir.mkdirs()
+        val name = Library.fileNameFor(songId + (inst?.let { " - $it" } ?: "")) + ".pdf"
+        val target = File(scoresDir, name)
+        // Sin importar mayúsculas (en Windows y Mac "bajo" y "Bajo" son el mismo archivo).
+        if (target.exists() || scoresDir.list().orEmpty().any { it.equals(name, ignoreCase = true) }) return "Ya hay una partitura «$name»: bórrala o cámbiala primero"
+        return runCatching { pdf.copyTo(target); null }.getOrElse { "No pude copiarla: ${it.message}" }
+    }
+
     /** Borra una partitura (a la papelera si el sistema lo permite). Devuelve un error o null. */
     @Synchronized
     fun deleteScore(file: String): String? {

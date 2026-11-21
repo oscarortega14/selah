@@ -62,6 +62,18 @@ class ScoresEditTest {
     }
 
     @Test
+    fun agregarOtroInstrumento() {
+        val pdf = File(dir, "escaneo bajo.pdf").apply { writeText("pdf") }
+        assertNull(music.addScoreFor(pdf, "Luz del camino", "Bajo"))
+        refresh()
+        assertEquals(listOf("Bajo", GENERAL_INSTRUMENT), scores.filter { it.songId == "Luz del camino" }.map { it.instrument })
+        assertTrue(pdf.isFile) // se copia, el original queda
+        assertTrue(music.addScoreFor(pdf, "Luz del camino", "bajo")!!.startsWith("Ya hay"))
+        assertEquals("Elige un archivo PDF", music.addScoreFor(File(dir, "nada.pdf"), "Luz del camino", "Piano"))
+        assertTrue(music.addScoreFor(pdf, "Luz del camino", "../Piano")!!.contains("«/»"))
+    }
+
+    @Test
     fun borrar() {
         assertNull(music.deleteScore("Luz del camino.pdf"))
         refresh()

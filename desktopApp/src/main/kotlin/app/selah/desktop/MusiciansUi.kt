@@ -293,6 +293,8 @@ private fun ScoresSection(m: Musicians) {
     var preview by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<app.selah.shared.ScoreRef?>(null) }
     var deleting by remember { mutableStateOf<String?>(null) }
+    // "+ Instrumento": la canción y el PDF elegido, esperando que digan de qué instrumento es.
+    var adding by remember { mutableStateOf<Pair<String, File>?>(null) }
     val music = m.music
     Text(
         "PDF con el nombre de la canción y el instrumento: «Cuán grande es Él - Bajo.pdf» (o una carpeta por canción con " +
@@ -316,7 +318,12 @@ private fun ScoresSection(m: Musicians) {
     }
     songs.take(60).forEach { id ->
         Column {
-            Text(m.songTitle(id), fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(m.songTitle(id), Modifier.weight(1f), fontWeight = FontWeight.Bold)
+                TextButton({
+                    pickFile("Partitura de otro instrumento para «${m.songTitle(id)}»", setOf("pdf"))?.let { adding = id to it }
+                }, Modifier.hand()) { Text("+ Instrumento…") }
+            }
             scores.filter { it.songId == id }.forEach { s ->
                 ScoreRow(if (s.instrument == GENERAL_INSTRUMENT) "Para todos" else s.instrument, s.file,
                     onView = { preview = s.file }, onEdit = { editing = s }, onDelete = { deleting = s.file })
@@ -334,6 +341,12 @@ private fun ScoresSection(m: Musicians) {
     preview?.let { f -> music?.let { ScorePreview(it, f) { preview = null } } }
     editing?.let { s ->
         ScoreEditDialog(m, s, onDone = { err -> if (err == null) { editing = null; m.refreshMusic(); message = "Listo: guardada." } else message = err }, onClose = { editing = null })
+    }
+    adding?.let { (id, pdf) ->
+        InstrumentDialog(m.songTitle(id), pdf.name, taken = scores.filter { it.songId == id }.map { it.instrument }, onSave = { inst ->
+            val err = music?.addScoreFor(pdf, id, inst)
+            if (err == null) { adding = null; m.refreshMusic(); message = "Listo: «${m.songTitle(id)}» ya tiene la de ${inst.ifBlank { "todos" }}." } else message = err
+        }, onClose = { adding = null })
     }
     deleting?.let { f ->
         androidx.compose.material3.AlertDialog(
@@ -396,6 +409,35 @@ private fun ScorePreview(music: MusicLibrary, file: String, onClose: () -> Unit)
             }
         }
     }
+}
+
+/** De qué instrumento es la partitura que se está agregando a una canción. */
+@Composable
+private fun InstrumentDialog(song: String, file: String, taken: List<String>, onSave: (String) -> Unit, onClose: () -> Unit) {
+    var instrument by remember { mutableStateOf("") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("¿De qué instrumento es?") },
+        text = {
+            Column(Modifier.width(480.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("«$file» para «$song»", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                androidx.compose.material3.OutlinedTextField(instrument, { instrument = it }, singleLine = true, placeholder = { Text("Bajo, Piano, Guitarra…") }, modifier = Modifier.fillMaxWidth().marksTyping())
+                val options = app.selah.shared.COMMON_INSTRUMENTS.filter { i -> taken.none { it.equals(i, ignoreCase = true) } }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    options.take(5).forEach { i -> androidx.compose.material3.FilterChip(instrument == i, { instrument = i }, { Text(i) }) }
+                }
+                if (options.size > 5) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    options.drop(5).forEach { i -> androidx.compose.material3.FilterChip(instrument == i, { instrument = i }, { Text(i) }) }
+                }
+                if (taken.isNotEmpty()) Text(
+                    "Ya tiene: " + taken.joinToString(", ") { if (it == GENERAL_INSTRUMENT) "para todos" else it },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton({ onSave(instrument.trim()) }, Modifier.hand(), enabled = instrument.isNotBlank()) { Text("Guardar") } },
+        dismissButton = { TextButton(onClose, Modifier.hand()) { Text("Cancelar") } },
+    )
 }
 
 /** Cambiar de qué canción e instrumento es una partitura. */
