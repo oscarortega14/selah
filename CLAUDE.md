@@ -110,7 +110,7 @@ MSIX 2.6.0 → Partner Center "Start update".
 Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
 distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
 
-## En main después de la 2.6.0 (sin publicar; sería la 2.7.0: funciones nuevas)
+## En main después de la 2.6.0 (sin publicar; será la 3.0.0 — el dueño la subió de 2.7.0 a 3.0.0 por la cantidad de cambios; iPhone 2.7.0 (20700) quedó en TestFlight)
 - Carrusel de anuncios (`Presenter.startCarousel/tick`, `ClientMessage.StartCarousel/StopCarousel`,
   `PresentationState.carouselSeconds`, `Library.features` con `FEATURE_CAROUSEL` para que la app solo lo ofrezca
   a un PC que lo entiende).
