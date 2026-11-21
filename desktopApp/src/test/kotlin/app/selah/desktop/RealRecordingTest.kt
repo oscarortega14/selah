@@ -17,7 +17,7 @@ class RealRecordingTest {
         val samples = RecordingAudio.read(rec)
         val out = StringBuilder("audio: ${"%.1f".format(RecordingAudio.seconds(samples))} s, leído en ${System.currentTimeMillis() - t0} ms\n")
         val t1 = System.currentTimeMillis()
-        val beats = BeatTracker.track(samples, null)!!
+        val beats = BeatTracker.track(samples, app.selah.shared.SongParser.parse("x", song).bpm)!!
         out.appendLine("pulsos: ${beats.times.size}, ${"%.1f".format(beats.bpm)} BPM, primero en ${"%.2f".format(beats.times.first())} s (${System.currentTimeMillis() - t1} ms)")
         val t2 = System.currentTimeMillis()
         // SELAH_HEARD: lo que ya se oyó con otro reconocedor ([{start, end, text}]), en vez de Whisper.
