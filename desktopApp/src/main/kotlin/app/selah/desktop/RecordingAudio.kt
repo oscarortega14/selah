@@ -15,12 +15,17 @@ object RecordingAudio {
     /** Lo que se puede elegir: audio (MP3, WAV, M4A) o video (MP4, MOV) con audio AAC. */
     val EXTENSIONS = setOf("mp3", "wav", "m4a", "mp4", "mov", "aac")
 
-    fun read(file: File): FloatArray {
-        val input = runCatching { openPcm(file) }.getOrElse {
-            Log.error("No pude leer el audio de ${file.name}", it)
-            throw IllegalStateException("No pude leer el audio de «${file.name}» (${it.message ?: it.javaClass.simpleName}). Prueba con un MP4, MP3 o WAV.", it)
-        }
-        input.use { pcm ->
+    fun read(file: File): FloatArray = try {
+        decode(file)
+    } catch (e: Exception) {
+        // El decodificador de AAC falla con algunos archivos a mitad de camino (no solo al abrirlos).
+        if (e is IllegalStateException && e.message?.startsWith("«") == true) throw e
+        Log.error("No pude leer el audio de ${file.name}", e)
+        throw IllegalStateException("No pude leer el audio de «${file.name}». Prueba con el mismo audio en MP4, MP3 o WAV.", e)
+    }
+
+    private fun decode(file: File): FloatArray {
+        openPcm(file).use { pcm ->
             val rate = pcm.format.sampleRate.toDouble()
             val ch = pcm.format.channels
             val buf = ByteArray(rate.toInt() / 5 * ch * 2)
