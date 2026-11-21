@@ -86,6 +86,9 @@ class Presentations(
         }
     }
 
+    /** Olvida las imágenes ya convertidas de [name] (se borró o cambió de nombre). */
+    fun forget(name: String) { File(cacheDir, cacheName(name)).deleteRecursively() }
+
     /** Imagen de la diapositiva [index] (desde 0) si ya está convertida (para dibujarla rápido). */
     fun page(name: String, index: Int): File? =
         File(File(cacheDir, cacheName(name)), pageName(index)).takeIf { it.isFile }

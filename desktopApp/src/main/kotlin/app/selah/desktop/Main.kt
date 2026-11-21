@@ -230,6 +230,7 @@ fun main() {
                     suggested = remember(catalog) { catalog.songs.filter { library.song(it.id)?.timingSuggested == true }.map { it.id } },
                     undoSuggestion = { id -> runCatching { library.undoSuggestion(id); null }.getOrElse { it.message ?: "No pude deshacerlo" } },
                     recording = recordingTimings,
+                    refreshMusic = { refreshMusic() },
                     autoState = { id ->
                         library.song(id)?.takeIf { app.selah.shared.usableTiming(it.timing) }?.let { s ->
                             listOfNotNull(s.bpm?.let { "$it BPM" }, if (s.timingSuggested) "tiempos sugeridos" else "con tiempos").joinToString(" · ")

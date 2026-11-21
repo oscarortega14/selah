@@ -4,6 +4,7 @@ import app.selah.shared.ProtocolJson
 import app.selah.shared.ScoreRef
 import app.selah.shared.SequenceName
 import app.selah.shared.SongSummary
+import app.selah.shared.GENERAL_INSTRUMENT
 import app.selah.shared.matchScores
 import app.selah.shared.matchSequence
 import app.selah.shared.normalizeText
@@ -180,6 +181,37 @@ class MusicLibrary(baseDir: File) {
 
     /** Copia PDFs de partituras (o audios de secuencias) a su carpeta. Devuelve cuántos se agregaron. */
     fun addScores(files: List<File>): Int = copyInto(scoresDir, files.filter { it.extension.lowercase() == "pdf" })
+
+    /**
+     * Cambia de qué canción ([songId], el nombre de su archivo) y de qué instrumento es una partitura: le pone el nombre
+     * "Canción - Instrumento.pdf" (o "Canción.pdf" si es para todos). Devuelve un error para mostrar, o null.
+     */
+    @Synchronized
+    fun reassignScore(file: String, songId: String, instrument: String?): String? {
+        val src = scorePages.file(file) ?: return "No encontré esa partitura"
+        val inst = instrument?.trim()?.takeIf { it.isNotEmpty() && !it.equals(GENERAL_INSTRUMENT, ignoreCase = true) }
+        if (inst != null && (inst.contains('/') || inst.contains('\\') || inst.contains(" - "))) return "El instrumento no puede llevar «/» ni « - »"
+        val name = Library.fileNameFor(songId + (inst?.let { " - $it" } ?: "")) + ".pdf"
+        val target = File(scoresDir, name)
+        if (target.canonicalFile == src.canonicalFile) return null
+        if (target.exists()) return "Ya hay una partitura «$name»: bórrala primero o elige otro instrumento"
+        val folder = src.parentFile.takeIf { it != scoresDir }
+        if (!src.renameTo(target)) runCatching { src.copyTo(target); src.delete() }.onFailure { return "No pude cambiarle el nombre: ${it.message}" }
+        // Si quedó vacía la carpeta de la canción ("Canción/Bajo.pdf"), se quita.
+        folder?.takeIf { it.listFiles().orEmpty().none { f -> !f.name.startsWith(".") } }?.deleteRecursively()
+        scorePages.forget(file)
+        return null
+    }
+
+    /** Borra una partitura (a la papelera si el sistema lo permite). Devuelve un error o null. */
+    @Synchronized
+    fun deleteScore(file: String): String? {
+        val src = scorePages.file(file) ?: return "No encontré esa partitura"
+        val trashed = runCatching { java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().moveToTrash(src) }.getOrDefault(false)
+        if (!trashed && !src.delete()) return "No pude borrarla"
+        scorePages.forget(file)
+        return null
+    }
     fun addSequences(files: List<File>): Int = copyInto(sequencesDir, files.filter { isSequenceFile(it.name) })
 
     private fun copyInto(dir: File, files: List<File>): Int {

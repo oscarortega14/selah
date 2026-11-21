@@ -166,6 +166,8 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   "En otro aparato: Selah solo la sigue". Con "▶ Secuencia" (en el PC o el celular del director) Selah lleva el tiempo
   sin sonar; la letra y las partituras van solas, y "◀ Antes / Después ▶" corrige si se adelantan o atrasan. Con
   **"Escuchar el click"** (el click entra por una entrada de audio del PC) arranca solo al oírlo y se mantiene alineado.
+- **Partituras** ("¿Qué usa tu iglesia?" → pestaña Partituras): buscar, **Ver** cada PDF página por página, **Cambiar** de
+  qué canción e instrumento es (le pone el nombre "Canción - Instrumento.pdf") y **Borrar** (a la papelera).
 - **Llevar a otro computador** (? → "Llevar a otro computador…"): se prepara todo en un computador (canciones con sus
   tiempos, listas y cultos, partituras, secuencias, diseño y fondos, anuncios, Biblias agregadas, historial; se elige qué)
   y Selah arma un .zip. En el otro computador, "Abrir un .zip…" → "Traer": lo igual no se toca, lo que cambió se

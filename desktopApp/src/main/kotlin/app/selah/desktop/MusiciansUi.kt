@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -67,6 +68,8 @@ data class Musicians(
     val recording: RecordingTimings? = null,
     /** Cómo está una canción para la letra automática ("110 BPM · con tiempos"), o null si no tiene tiempos. */
     val autoState: (songId: String) -> String? = { null },
+    /** Volver a leer las carpetas de partituras y secuencias (después de agregar, cambiar o borrar). */
+    val refreshMusic: () -> Unit = {},
 ) {
     fun hasSequence(songId: String?): Boolean = church.sequences && songId != null && songId in catalog.sequences
 }
@@ -286,22 +289,146 @@ private fun FeatureSwitch(title: String, detail: String, on: Boolean, onChange: 
 @Composable
 private fun ScoresSection(m: Musicians) {
     var message by remember { mutableStateOf<String?>(null) }
+    var query by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<app.selah.shared.ScoreRef?>(null) }
+    var deleting by remember { mutableStateOf<String?>(null) }
+    val music = m.music
     Text(
         "PDF con el nombre de la canción y el instrumento: «Cuán grande es Él - Bajo.pdf» (o una carpeta por canción con " +
             "«Bajo.pdf», «Teclado.pdf»…). Sin instrumento («Cuán grande es Él.pdf») es para todos.",
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton({ m.music?.let { message = addFiles("Agregar partituras (PDF)", setOf("pdf")) { f -> it.addScores(f) } } }, Modifier.hand()) { Text("Agregar PDFs…") }
-        TextButton({ m.music?.scoresDir?.let { d -> d.mkdirs(); runCatching { java.awt.Desktop.getDesktop().open(d) } } }, Modifier.hand()) { Text("Abrir carpeta") }
+        OutlinedButton({ music?.let { message = addFiles("Agregar partituras (PDF)", setOf("pdf")) { f -> it.addScores(f) }; m.refreshMusic() } }, Modifier.hand()) { Text("Agregar PDFs…") }
+        TextButton({ music?.scoresDir?.let { d -> d.mkdirs(); runCatching { java.awt.Desktop.getDesktop().open(d) } } }, Modifier.hand()) { Text("Abrir carpeta") }
     }
     message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
-    val bySong = m.catalog.scores.groupBy { it.songId }
-    if (bySong.isEmpty()) Text("Todavía no hay partituras.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-    bySong.forEach { (song, list) ->
-        Text("• ${m.songTitle(song)}: " + list.joinToString(", ") { if (it.instrument == GENERAL_INSTRUMENT) "para todos" else it.instrument })
+    val scores = m.catalog.scores
+    if (scores.isEmpty() && m.catalog.scoreOrphans.isEmpty()) { Text("Todavía no hay partituras.", color = MaterialTheme.colorScheme.onSurfaceVariant); return }
+    androidx.compose.material3.OutlinedTextField(
+        query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción (${scores.map { it.songId }.distinct().size} con partitura)") },
+        modifier = Modifier.fillMaxWidth().marksTyping(),
+    )
+    val songs = remember(query, scores, m.songs) {
+        val ids = scores.map { it.songId }.distinct()
+        if (query.isBlank()) ids else m.songs.filter { it.id in ids }.search(query).map { it.id }
     }
-    Orphans(m.catalog.scoreOrphans, "Estos PDF no corresponden a ninguna canción (revisa que el nombre sea igual al título):")
+    songs.take(60).forEach { id ->
+        Column {
+            Text(m.songTitle(id), fontWeight = FontWeight.Bold)
+            scores.filter { it.songId == id }.forEach { s ->
+                ScoreRow(if (s.instrument == GENERAL_INSTRUMENT) "Para todos" else s.instrument, s.file,
+                    onView = { preview = s.file }, onEdit = { editing = s }, onDelete = { deleting = s.file })
+            }
+        }
+    }
+    if (songs.size > 60) Text("…y ${songs.size - 60} más: busca por el nombre.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (m.catalog.scoreOrphans.isNotEmpty()) {
+        Text("Sin canción (${m.catalog.scoreOrphans.size}): el nombre no corresponde a ninguna canción. «Cambiar» para asignarla.", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+        m.catalog.scoreOrphans.forEach { f ->
+            ScoreRow(f, f, onView = { preview = f }, onEdit = { editing = app.selah.shared.ScoreRef("", GENERAL_INSTRUMENT, f) }, onDelete = { deleting = f })
+        }
+    }
+
+    preview?.let { f -> music?.let { ScorePreview(it, f) { preview = null } } }
+    editing?.let { s ->
+        ScoreEditDialog(m, s, onDone = { err -> if (err == null) { editing = null; m.refreshMusic(); message = "Listo: guardada." } else message = err }, onClose = { editing = null })
+    }
+    deleting?.let { f ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("¿Borrar esta partitura?") },
+            text = { Text("«$f» se va a la papelera del computador (de ahí se puede recuperar).") },
+            confirmButton = {
+                TextButton({ message = music?.deleteScore(f) ?: "Listo: «$f» está en la papelera."; deleting = null; m.refreshMusic() }, Modifier.hand()) {
+                    Text("Borrar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton({ deleting = null }, Modifier.hand()) { Text("Cancelar") } },
+        )
+    }
+}
+
+@Composable
+private fun ScoreRow(label: String, file: String, onView: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(label)
+            if (label != file) Text(file, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onView, Modifier.hand()) { Text("Ver") }
+        TextButton(onEdit, Modifier.hand()) { Text("Cambiar") }
+        TextButton(onDelete, Modifier.hand()) { Text("Borrar", color = MaterialTheme.colorScheme.error) }
+    }
+}
+
+/** Las páginas de una partitura, como las verá el músico. */
+@Composable
+private fun ScorePreview(music: MusicLibrary, file: String, onClose: () -> Unit) {
+    var pages by remember(file) { mutableStateOf<List<File>?>(null) }
+    var error by remember(file) { mutableStateOf<String?>(null) }
+    var index by remember(file) { mutableStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(file) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { music.scorePages.pages(file) }.onSuccess { pages = it }.onFailure { error = it.message ?: "No pude abrirla" }
+        }
+    }
+    androidx.compose.ui.window.DialogWindow(onCloseRequest = onClose, title = file, state = androidx.compose.ui.window.rememberDialogState(size = DpSize(760.dp, 940.dp))) {
+        MaterialTheme(colorScheme = darkColorScheme()) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val list = pages
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton({ index-- }, Modifier.hand(), enabled = index > 0) { Text("◀ Anterior") }
+                        Text(if (list == null) "Preparando…" else "Página ${index + 1} de ${list.size}", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        TextButton({ index++ }, Modifier.hand(), enabled = list != null && index < list.lastIndex) { Text("Siguiente ▶") }
+                    }
+                    when {
+                        error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                        list == null -> androidx.compose.material3.CircularProgressIndicator()
+                        else -> {
+                            val img = remember(list[index]) { runCatching { list[index].inputStream().use { androidx.compose.ui.res.loadImageBitmap(it) } }.getOrNull() }
+                            if (img != null) androidx.compose.foundation.Image(img, null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Cambiar de qué canción e instrumento es una partitura. */
+@Composable
+private fun ScoreEditDialog(m: Musicians, score: app.selah.shared.ScoreRef, onDone: (String?) -> Unit, onClose: () -> Unit) {
+    var songId by remember(score) { mutableStateOf(score.songId.ifEmpty { null }) }
+    var query by remember(score) { mutableStateOf(if (score.songId.isEmpty()) app.selah.shared.splitMusicFileName(score.file).first else "") }
+    var instrument by remember(score) { mutableStateOf(if (score.instrument == GENERAL_INSTRUMENT) "" else score.instrument) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Cambiar la partitura") },
+        text = {
+            Column(Modifier.width(480.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(score.file, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Canción: " + (songId?.let(m.songTitle) ?: "ninguna"), fontWeight = FontWeight.Bold)
+                androidx.compose.material3.OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Busca otra canción") }, modifier = Modifier.fillMaxWidth().marksTyping())
+                if (query.isNotBlank()) m.songs.search(query).take(5).forEach { s ->
+                    TextButton({ songId = s.id; query = "" }, Modifier.hand()) { Text("→ ${s.title}") }
+                }
+                Text("Instrumento (vacío = para todos):", fontWeight = FontWeight.Bold)
+                androidx.compose.material3.OutlinedTextField(instrument, { instrument = it }, singleLine = true, placeholder = { Text("Para todos") }, modifier = Modifier.fillMaxWidth().marksTyping())
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    (listOf("") + app.selah.shared.COMMON_INSTRUMENTS.take(5)).forEach { i ->
+                        androidx.compose.material3.FilterChip(instrument == i, { instrument = i }, { Text(i.ifEmpty { "Para todos" }) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton({ val id = songId ?: return@TextButton; onDone(m.music?.reassignScore(score.file, id, instrument)) }, Modifier.hand(), enabled = songId != null) { Text("Guardar") }
+        },
+        dismissButton = { TextButton(onClose, Modifier.hand()) { Text("Cancelar") } },
+    )
 }
 
 @Composable
