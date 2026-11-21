@@ -18,3 +18,14 @@ class ChurchTabsTest {
         assertEquals(listOf(ChurchTab.FEATURES, ChurchTab.SEQUENCES), churchTabs(ChurchFeatures(sequences = true)))
     }
 }
+
+class ScoresAlphabetTest {
+    @kotlin.test.Test
+    fun letraDeCadaCancion() {
+        kotlin.test.assertEquals("E", initialOf("Él es mi rey"))
+        kotlin.test.assertEquals("N", initialOf("Ñandutí"))
+        kotlin.test.assertEquals("#", initialOf("1 Corintios 13"))
+        kotlin.test.assertEquals("A", initialOf("¡Aleluya!"))
+        kotlin.test.assertEquals("#", initialOf(""))
+    }
+}

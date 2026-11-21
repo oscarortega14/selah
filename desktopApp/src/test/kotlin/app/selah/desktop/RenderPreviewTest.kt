@@ -64,6 +64,18 @@ class RenderPreviewTest {
                 File(outDir, "10-que-usa-tu-iglesia-${tab.name.lowercase()}.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
             }
         }
+        // Partituras con muchas canciones: abecedario y acordeón.
+        val many = musicians.copy(
+            catalog = musicians.catalog.copy(
+                scores = listOf("Aclamad", "Alabad a Jehová", "Bendito sea", "Cuán grande es Él", "Él es mi rey", "Grande y fuerte", "Salmo 23").flatMap { s ->
+                    listOf(app.selah.shared.GENERAL_INSTRUMENT, "Bajo", "Piano", "Trompeta 1").map { app.selah.shared.ScoreRef(s, it, "$s - $it.pdf") }
+                },
+                scoreOrphans = listOf("Jesús salva - Bajo.pdf", "Jesús salva - Piano.pdf", "Glorifícate - Trompeta 1.pdf"),
+            ),
+        )
+        ImageComposeScene(820, 820, Density(1f)) { MusiciansContent(many, devices = emptyList(), start = ChurchTab.SCORES) }.use { scene ->
+            File(outDir, "10-que-usa-tu-iglesia-partituras-muchas.png").writeBytes(scene.render(0).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+        }
         // Escuchando la grabación de una canción: la rueda junto a ella.
         ImageComposeScene(820, 820, Density(1f)) { MusiciansContent(musicians, devices = emptyList(), start = ChurchTab.AUTO, busy = "Sublime gracia" to "Escuchando la letra…") }.use { scene ->
             File(outDir, "10-que-usa-tu-iglesia-auto-escuchando.png").writeBytes(scene.render(500).encodeToData(EncodedImageFormat.PNG)!!.bytes)

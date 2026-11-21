@@ -1,5 +1,6 @@
 package app.selah.desktop
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -295,6 +296,9 @@ private fun ScoresSection(m: Musicians) {
     var deleting by remember { mutableStateOf<String?>(null) }
     // "+ Instrumento": la canción y el PDF elegido, esperando que digan de qué instrumento es.
     var adding by remember { mutableStateOf<Pair<String, File>?>(null) }
+    // Canciones abiertas (acordeón) y la letra elegida en el abecedario.
+    var open by remember { mutableStateOf(emptySet<String>()) }
+    var letter by remember { mutableStateOf<String?>(null) }
     val music = m.music
     Text(
         "PDF con el nombre de la canción y el instrumento: «Cuán grande es Él - Bajo.pdf» (o una carpeta por canción con " +
@@ -308,33 +312,66 @@ private fun ScoresSection(m: Musicians) {
     message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
     val scores = m.catalog.scores
     if (scores.isEmpty() && m.catalog.scoreOrphans.isEmpty()) { Text("Todavía no hay partituras.", color = MaterialTheme.colorScheme.onSurfaceVariant); return }
+    val allIds = remember(scores) { scores.map { it.songId }.distinct() }
     androidx.compose.material3.OutlinedTextField(
-        query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción (${scores.map { it.songId }.distinct().size} con partitura)") },
+        query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción (${allIds.size} con partitura)") },
         modifier = Modifier.fillMaxWidth().marksTyping(),
     )
-    val songs = remember(query, scores, m.songs) {
-        val ids = scores.map { it.songId }.distinct()
-        if (query.isBlank()) ids else m.songs.filter { it.id in ids }.search(query).map { it.id }
+    // Abecedario: solo las letras que tienen canciones; "Todas" las muestra todas.
+    val letters = remember(allIds) { allIds.groupBy { initialOf(m.songTitle(it)) } }
+    if (query.isBlank()) androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        LetterButton("Todas", letter == null) { letter = null }
+        ('A'..'Z').map { it.toString() }.plus("#").filter { it in letters }.forEach { l -> LetterButton(l, letter == l) { letter = l } }
     }
-    songs.take(60).forEach { id ->
+    val songs = remember(query, letter, scores, m.songs) {
+        when {
+            query.isNotBlank() -> m.songs.filter { it.id in allIds }.search(query).map { it.id }
+            letter != null -> letters[letter].orEmpty()
+            else -> allIds
+        }.sortedBy { app.selah.shared.normalizeText(m.songTitle(it)) }
+    }
+    if (songs.isEmpty()) Text("Ninguna canción con eso.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    songs.forEach { id ->
+        val mine = scores.filter { it.songId == id }
+        val isOpen = id in open || songs.size == 1
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(m.songTitle(id), Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().hand().clickable { open = if (id in open) open - id else open + id }) {
+                Text(if (isOpen) "▼" else "▶", Modifier.width(24.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                Column(Modifier.weight(1f)) {
+                    Text(m.songTitle(id), fontWeight = FontWeight.Bold)
+                    Text(
+                        "${mine.size} partitura" + (if (mine.size == 1) "" else "s") + " · " +
+                            mine.joinToString(", ") { if (it.instrument == GENERAL_INSTRUMENT) "para todos" else it.instrument },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
                 TextButton({
                     pickFile("Partitura de otro instrumento para «${m.songTitle(id)}»", setOf("pdf"))?.let { adding = id to it }
                 }, Modifier.hand()) { Text("+ Instrumento…") }
             }
-            scores.filter { it.songId == id }.forEach { s ->
+            if (isOpen) mine.forEach { s ->
                 ScoreRow(if (s.instrument == GENERAL_INSTRUMENT) "Para todos" else s.instrument, s.file,
                     onView = { preview = s.file }, onEdit = { editing = s }, onDelete = { deleting = s.file })
             }
         }
     }
-    if (songs.size > 60) Text("…y ${songs.size - 60} más: busca por el nombre.", color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (m.catalog.scoreOrphans.isNotEmpty()) {
-        Text("Sin canción (${m.catalog.scoreOrphans.size}): el nombre no corresponde a ninguna canción. «Cambiar» para asignarla.", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-        m.catalog.scoreOrphans.forEach { f ->
-            ScoreRow(f, f, onView = { preview = f }, onEdit = { editing = app.selah.shared.ScoreRef("", GENERAL_INSTRUMENT, f) }, onDelete = { deleting = f })
+        val bySong = m.catalog.scoreOrphans.groupBy { app.selah.shared.splitMusicFileName(it).first }.toSortedMap(compareBy { app.selah.shared.normalizeText(it) })
+        Text(
+            "Sin canción (${bySong.size}): no hay una canción con ese nombre en Selah. Crea la canción con ese nombre y se asignan " +
+                "solas, o usa «Cambiar» para ponerlas en otra.",
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error,
+        )
+        bySong.forEach { (name, files) ->
+            val key = "sin:$name"
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().hand().clickable { open = if (key in open) open - key else open + key }) {
+                Text(if (key in open) "▼" else "▶", Modifier.width(24.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleSmall)
+                Text("$name · ${files.size} archivo" + if (files.size == 1) "" else "s", Modifier.weight(1f))
+            }
+            if (key in open) files.forEach { f ->
+                ScoreRow(app.selah.shared.splitMusicFileName(f).second ?: f, f, onView = { preview = f }, onEdit = { editing = app.selah.shared.ScoreRef("", GENERAL_INSTRUMENT, f) }, onDelete = { deleting = f })
+            }
         }
     }
 
@@ -360,6 +397,17 @@ private fun ScoresSection(m: Musicians) {
             },
             dismissButton = { TextButton({ deleting = null }, Modifier.hand()) { Text("Cancelar") } },
         )
+    }
+}
+
+/** La letra con que se ordena una canción en el abecedario ("Él es" → E; "1 Corintios" → #). */
+internal fun initialOf(title: String): String =
+    app.selah.shared.normalizeText(title).firstOrNull { it.isLetterOrDigit() }?.let { if (it in 'a'..'z') it.uppercaseChar().toString() else if (it == 'ñ') "N" else "#" } ?: "#"
+
+@Composable
+private fun LetterButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    TextButton(onClick, Modifier.hand(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)) {
+        Text(label, fontWeight = if (selected) FontWeight.Bold else null, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
