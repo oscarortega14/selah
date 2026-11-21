@@ -20,7 +20,14 @@ class RealRecordingTest {
         val beats = BeatTracker.track(samples, null)!!
         out.appendLine("pulsos: ${beats.times.size}, ${"%.1f".format(beats.bpm)} BPM, primero en ${"%.2f".format(beats.times.first())} s (${System.currentTimeMillis() - t1} ms)")
         val t2 = System.currentTimeMillis()
-        val heard = SungLyrics.hear(samples, model, "")
+        // SELAH_HEARD: lo que ya se oyó con otro reconocedor ([{start, end, text}]), en vez de Whisper.
+        val heard = System.getenv("SELAH_HEARD")?.let { f ->
+            kotlinx.serialization.json.Json.parseToJsonElement(File(f).readText()).let { it as kotlinx.serialization.json.JsonArray }.map { e ->
+                val o = e as kotlinx.serialization.json.JsonObject
+                fun d(k: String) = (o[k] as kotlinx.serialization.json.JsonPrimitive).content.toDouble()
+                HeardPhrase(d("start"), d("end"), (o["text"] as kotlinx.serialization.json.JsonPrimitive).content)
+            }
+        } ?: SungLyrics.hear(samples, model, "")
         out.appendLine("whisper: ${System.currentTimeMillis() - t2} ms")
         heard.forEach { out.appendLine("%7.2f-%7.2f %s".format(it.start, it.end, it.text)) }
         val sections = RecordingTimings.sections(song)
@@ -32,5 +39,10 @@ class RealRecordingTest {
         val o = RecordingTimings.outcome(heard, sections, beats, RecordingAudio.seconds(samples))
         out.appendLine("BPM: ${o?.bpm}\nOrden: ${o?.order?.joinToString(", ")}\nTiempos: ${o?.timing?.joinToString(" ")}")
         File(System.getenv("SELAH_REAL_OUT") ?: (rec.path + ".txt")).writeText(out.toString())
+        // SELAH_GUARDAR=carpeta Selah:id de la canción → se guarda en esa canción.
+        System.getenv("SELAH_GUARDAR")?.let { g ->
+            val (base, id) = g.split(":", limit = 2)
+            o?.let { Library(File(base)).also { it.reload() }.applyRecording(id, it.bpm, it.order, it.timing) }
+        }
     }
 }
