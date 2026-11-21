@@ -98,6 +98,16 @@ class RecordingTimingsTest {
     }
 
     @Test
+    fun lasMarcasDeMusicaNoEmpiezanUnaDiapositiva() {
+        val r = assertNotNull(LyricsAligner.align(listOf(
+            p(0.0, 3.0, "[música]"), p(3.0, 6.0, "♪♪"),
+            p(20.0, 28.0, "Caminamos en la mañana clara buscando tu voz en el viento"),
+            p(28.0, 36.0, "Tu luz alumbra cada paso y llena de paz el corazón"),
+        ), sections, 40.0))
+        assertEquals(20.0, r.starts.first())
+    }
+
+    @Test
     fun otraCancionNoSeReconoce() {
         assertNull(LyricsAligner.align(listOf(p(0.0, 8.0, "Esta es otra canción que no tiene nada que ver"), p(8.0, 16.0, "con lo que dice la letra de arriba")), sections, 20.0))
     }
@@ -169,6 +179,18 @@ class RecordingTimingsTest {
 }
 
 class RecordingAudioTest {
+    @Test
+    fun leeMp3AunqueElLectorDeAacLoRevisePrimero() {
+        val file = File(javaClass.getResource("/tono-2s.mp3")!!.toURI())
+        // Lo que pasaba: el de AAC lo revisa primero y lo deja ilegible por el camino general.
+        runCatching { net.sourceforge.jaad.spi.javasound.AACAudioFileReader().getAudioInputStream(file) }
+        val samples = RecordingAudio.read(file)
+        assertTrue(abs(RecordingAudio.seconds(samples) - 2.0) < 0.15, "duración ${RecordingAudio.seconds(samples)}")
+        assertTrue(samples.maxOf { abs(it) } > 0.05)
+        // Y las secuencias (mismo camino)
+        openPcm(file).use { assertEquals(48_000f, it.format.sampleRate) }
+    }
+
     @Test
     fun leeAudioAacAunqueElLectorDeMp3LoRevisePrimero() {
         val file = File(javaClass.getResource("/tono-2s.m4a")!!.toURI())

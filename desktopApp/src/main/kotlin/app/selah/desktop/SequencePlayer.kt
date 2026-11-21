@@ -236,8 +236,12 @@ internal fun openPcm(file: File): AudioInputStream {
     if (file.extension.equals("wav", ignoreCase = true)) return WavReader.open(file)
     // Video o audio AAC: directo a su lector. Si el de MP3 lo revisa primero, deja el archivo ilegible para el de AAC
     // ("Resetting to invalid mark"), y el orden en que Java los prueba cambia según el instalador.
-    val src = if (file.extension.lowercase() in AAC_EXTENSIONS) net.sourceforge.jaad.spi.javasound.AACAudioFileReader().getAudioInputStream(file)
-    else AudioSystem.getAudioInputStream(file)
+    // Igual con los MP3: el lector de AAC, si los revisa primero, los deja ilegibles para el de MP3.
+    val src = when (file.extension.lowercase()) {
+        in AAC_EXTENSIONS -> net.sourceforge.jaad.spi.javasound.AACAudioFileReader().getAudioInputStream(file)
+        "mp3" -> javazoom.spi.mpeg.sampled.file.MpegAudioFileReader().getAudioInputStream(file)
+        else -> AudioSystem.getAudioInputStream(file)
+    }
     val f = src.format
     val rate = f.sampleRate.takeIf { it > 0 } ?: 44_100f
     val pcm = AudioFormat(AudioFormat.Encoding.PCM_SIGNED, rate, 16, f.channels.coerceIn(1, 2), 2 * f.channels.coerceIn(1, 2), rate, false)

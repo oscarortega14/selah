@@ -56,7 +56,8 @@ object LyricsAligner {
      * así que se le pone la duración que tiene esa misma frase en otra parte de la canción. [lyrics]: las palabras de la letra.
      */
     internal fun clean(phrases: List<HeardPhrase>, audioSeconds: Double, lyrics: Set<String> = emptySet()): List<HeardPhrase> {
-        val real = phrases.filter { p -> p.start < audioSeconds - 0.5 && p.end > p.start && tokens(p.text).isNotEmpty() }
+        // Fuera las marcas de Whisper para lo que no es canto: "[música]", "(aplausos)", "♪".
+        val real = phrases.filter { p -> p.start < audioSeconds - 0.5 && p.end > p.start && tokens(p.text).isNotEmpty() && !isMarker(p.text) }
             .map { it.copy(end = minOf(it.end, audioSeconds)) }
         if (real.isEmpty()) return real
         fun isLyric(p: HeardPhrase): Boolean {
@@ -184,7 +185,9 @@ object LyricsAligner {
                 if (similarity(heard[j].text, slides[s][posOf[path[j]]]) >= 0.6) good++
                 j++
             }
-            if (good >= minOf(3, (slides[s].size + 1) / 2)) out += Entry(s, heard[i].at)
+            // Empieza en la primera palabra que de verdad es de la letra (no en un ruido que quedó pegado al comienzo).
+            val firstGood = (i until j).firstOrNull { k -> similarity(heard[k].text, slides[s][posOf[path[k]]]) >= 0.6 } ?: i
+            if (good >= minOf(3, (slides[s].size + 1) / 2)) out += Entry(s, heard[firstGood].at)
             i = j.coerceAtLeast(i + 1)
         }
         return out
@@ -200,6 +203,12 @@ object LyricsAligner {
         val chars = ws.sumOf { it.length + 1 }.coerceAtLeast(1)
         var acc = 0
         ws.map { w -> Word(w, p.start + (p.end - p.start) * acc / chars).also { acc += w.length + 1 } }
+    }
+
+    /** "[música]", "(aplausos)", "♪♪": Whisper marca así lo que no es canto. */
+    internal fun isMarker(text: String): Boolean {
+        val s = text.trim()
+        return s.startsWith("[") || s.startsWith("(") || s.startsWith("♪") || s.startsWith("*")
     }
 
     internal fun tokens(text: String): List<String> =

@@ -35,7 +35,10 @@ class ScoresEditTest {
     }
 
     @AfterTest
-    fun tearDown() { dir.deleteRecursively() }
+    fun tearDown() {
+        // Selah prepara las imágenes de las partituras en segundo plano: si todavía escribe, se espera un poco y se reintenta.
+        repeat(20) { if (runCatching { dir.deleteRecursively() }.getOrDefault(false)) return; Thread.sleep(100) }
+    }
 
     private fun refresh() = music.refresh(library.catalog.value.songs)
     private val scores get() = music.catalog.value.scores

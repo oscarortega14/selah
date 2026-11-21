@@ -146,28 +146,50 @@ object SungLyrics {
     /** null si funciona en este equipo; si no, por qué. */
     val problem: String? get() = loaded?.let { "El reconocimiento del canto no funciona en este equipo (${it.message ?: it.javaClass.simpleName})" }
 
-    /** [hint]: la letra de la canción, para que Whisper reconozca mejor sus palabras. */
+    /**
+     * [hint]: una pista para Whisper (vacía: ninguna; la letra no conviene, porque la inventa en el instrumental). Si a la
+     * primera no entiende casi nada (a veces cree que todo es música o se traba devolviendo puntos, sobre todo cuando la
+     * voz va muy por debajo de la banda), lo intenta otra vez diciéndole que es una canción cristiana en español.
+     */
     fun hear(samples: FloatArray, model: File, hint: String): List<HeardPhrase> {
         problem?.let { throw IllegalStateException(it) }
         val w = WhisperJNI()
         val ctx = w.init(model.toPath())
         try {
-            val p = WhisperFullParams(WhisperSamplingStrategy.GREEDY)
-            p.language = "es"
-            p.nThreads = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
-            // Cada frase por su cuenta: si se equivoca en una, no arrastra el error a las demás.
-            p.noContext = true
-            p.suppressNonSpeechTokens = true
-            p.initialPrompt = hint.take(MAX_HINT)
-            val r = w.full(ctx, p, samples, samples.size)
-            if (r != 0) throw IllegalStateException("No pude reconocer el canto (código $r)")
-            return (0 until w.fullNSegments(ctx)).map { i ->
-                HeardPhrase(w.fullGetSegmentTimestamp0(ctx, i) / 100.0, w.fullGetSegmentTimestamp1(ctx, i) / 100.0, w.fullGetSegmentText(ctx, i).trim())
-            }.filter { it.text.isNotEmpty() }
+            val first = run(w, ctx, samples, hint)
+            val minutes = samples.size / RecordingAudio.RATE / 60.0
+            if (words(first) >= minutes * MIN_WORDS_PER_MINUTE) return first
+            val second = run(w, ctx, samples, SONG_HINT)
+            return if (words(second) > words(first)) second else first
         } finally {
             w.free(ctx)
         }
     }
+
+    /** Palabras de verdad (no "[música]", "♪" ni puntos). */
+    private fun words(p: List<HeardPhrase>) = p.filterNot { it.text.startsWith("[") || it.text.startsWith("(") }
+        .sumOf { ph -> ph.text.split(' ').count { s -> s.count(Char::isLetter) >= 2 } }
+
+    private fun run(w: WhisperJNI, ctx: io.github.givimad.whisperjni.WhisperContext, samples: FloatArray, hint: String): List<HeardPhrase> {
+        val p = WhisperFullParams(WhisperSamplingStrategy.GREEDY)
+        p.language = "es"
+        p.nThreads = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+        // Cada frase por su cuenta: si se equivoca en una, no arrastra el error a las demás.
+        p.noContext = true
+        // Con la pista de canción, dejar que marque "♪" en lo instrumental lo ayuda a separar bien las líneas cantadas.
+        p.suppressNonSpeechTokens = hint != SONG_HINT
+        if (hint.isNotEmpty()) p.initialPrompt = hint.take(MAX_HINT)
+        val r = w.full(ctx, p, samples, samples.size)
+        if (r != 0) throw IllegalStateException("No pude reconocer el canto (código $r)")
+        return (0 until w.fullNSegments(ctx)).map { i ->
+            HeardPhrase(w.fullGetSegmentTimestamp0(ctx, i) / 100.0, w.fullGetSegmentTimestamp1(ctx, i) / 100.0, w.fullGetSegmentText(ctx, i).trim())
+        }.filter { it.text.isNotEmpty() }
+    }
+
+    private const val SONG_HINT = "Canción cristiana de alabanza en español."
+
+    /** Menos que esto, Whisper no entendió (una canción cantada tiene muchas más). */
+    private const val MIN_WORDS_PER_MINUTE = 15
 
     /** Whisper admite unas 220 palabras de pista: con la letra sin repetir alcanza. */
     private const val MAX_HINT = 800
