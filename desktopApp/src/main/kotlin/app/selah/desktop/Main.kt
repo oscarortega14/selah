@@ -133,7 +133,8 @@ fun main() {
         var connectOpen by remember { mutableStateOf(false) }
         var historyOpen by remember { mutableStateOf(false) }
         var backupsOpen by remember { mutableStateOf(false) }
-        var transferOpen by remember { mutableStateOf(false) }
+        // null = cerrada; false = llevar; true = traer
+        var transferOpen by remember { mutableStateOf<Boolean?>(null) }
         var biblesOpen by remember { mutableStateOf(false) }
         var servicesOpen by remember { mutableStateOf(false) }
         var musiciansOpen by remember { mutableStateOf(false) }
@@ -265,7 +266,7 @@ fun main() {
                     onOpenUpdate = { updateOpen = true },
                     onOpenWelcome = { settingsStore.update { it.copy(welcomeDone = false) } },
                     onOpenBackups = { backupsOpen = true },
-                    onOpenTransfer = { transferOpen = true },
+                    onOpenTransfer = { bring -> transferOpen = bring },
                     onOpenBibles = { biblesOpen = true },
                     lastSung = lastSung,
                     searchBible = { q -> library.bible?.search(q) },
@@ -313,14 +314,15 @@ fun main() {
                         onClose = { biblesOpen = false },
                     )
                 }
-                if (transferOpen) {
+                transferOpen?.let { bring ->
                     TransferDialog(
                         Transfer(library.baseDir), backups,
                         onImported = {
                             library.reload(); refreshMusic(); themes.reloadFromDisk()
                             commands.plan.reloadFromDisk(); commands.history?.reloadFromDisk(); commands.services?.reloadFromDisk()
                         },
-                        onClose = { transferOpen = false },
+                        onClose = { transferOpen = null },
+                        bring = bring,
                     )
                 }
                 if (backupsOpen) {

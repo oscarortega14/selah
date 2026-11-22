@@ -92,7 +92,7 @@ fun OperatorScreen(
     onOpenHistory: () -> Unit = {},
     onOpenWelcome: () -> Unit = {},
     onOpenBackups: () -> Unit = {},
-    onOpenTransfer: () -> Unit = {},
+    onOpenTransfer: (bring: Boolean) -> Unit = {},
     /** Versión nueva disponible (null = ninguna). */
     updateVersion: String? = null,
     onOpenUpdate: () -> Unit = {},
@@ -196,7 +196,7 @@ private fun TopBar(
     onOpenHistory: () -> Unit,
     onOpenWelcome: () -> Unit,
     onOpenBackups: () -> Unit,
-    onOpenTransfer: () -> Unit,
+    onOpenTransfer: (bring: Boolean) -> Unit,
     updateVersion: String?,
     onOpenUpdate: () -> Unit,
     onHelp: () -> Unit,
@@ -901,7 +901,7 @@ private fun OpenPlanDialog(
 
 /** "?": atajos, la guía de inicio y los respaldos. */
 @Composable
-private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: () -> Unit, onTransfer: () -> Unit = {}) {
+private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: () -> Unit, onTransfer: (bring: Boolean) -> Unit = {}) {
     var open by remember { mutableStateOf(false) }
     Box {
         TextButton({ open = true }) { Text("?", style = MaterialTheme.typography.titleMedium) }
@@ -909,7 +909,8 @@ private fun HelpMenu(onShortcuts: () -> Unit, onWelcome: () -> Unit, onBackups: 
             DropdownMenuItem({ Text("Atajos de teclado") }, { open = false; onShortcuts() }, Modifier.hand())
             DropdownMenuItem({ Text("Guía de inicio") }, { open = false; onWelcome() }, Modifier.hand())
             DropdownMenuItem({ Text("Respaldos…") }, { open = false; onBackups() }, Modifier.hand())
-            DropdownMenuItem({ Text("Llevar a otro computador…") }, { open = false; onTransfer() }, Modifier.hand())
+            DropdownMenuItem({ Text("Llevar a otro computador…") }, { open = false; onTransfer(false) }, Modifier.hand())
+            DropdownMenuItem({ Text("Traer de otro computador…") }, { open = false; onTransfer(true) }, Modifier.hand())
             DropdownMenuItem(
                 { Text("Ver el registro (si algo falló)") },
                 { open = false; Log.current?.takeIf { it.isFile }?.let { f -> runCatching { java.awt.Desktop.getDesktop().open(f) } } },

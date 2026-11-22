@@ -31,6 +31,8 @@ class TransferTest {
         put(mac, "partituras/Luz - Bajo.pdf", "pdf")
         put(mac, "secuencias/Luz.mp3", "x".repeat(5000))
         put(mac, "secuencias/.analisis.json", "{}")
+        put(mac, "partituras/.diapositivas/luz/1.png", "png")
+        put(mac, "fondos/.miniaturas/Mar.mp4.jpg", "jpg")
         put(mac, "tema.json", "{}")
         put(mac, "biblia/Mi Biblia.json", "{}")
         put(mac, "listas/Domingo.json", "[]")
@@ -79,6 +81,7 @@ class TransferTest {
         val names = ZipFile(zip).use { z -> z.entries().asSequence().map { it.name }.toSet() }
         assertTrue("secuencias/Luz.mp3" in names)
         assertFalse("secuencias/.analisis.json" in names) // se vuelve a calcular allá
+        assertFalse(names.any { it.contains("/.") }) // ni las páginas convertidas ni las imágenes de los videos
         assertEquals(5000, Transfer(mac).sizes()["secuencias"]!!.bytes)
     }
 

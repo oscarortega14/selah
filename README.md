@@ -173,7 +173,7 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
   qué canción e instrumento es (le pone el nombre "Canción - Instrumento.pdf") y **Borrar** (a la papelera).
 - **Llevar a otro computador** (? → "Llevar a otro computador…"): se prepara todo en un computador (canciones con sus
   tiempos, listas y cultos, partituras, secuencias, diseño y fondos, anuncios, Biblias agregadas, historial; se elige qué)
-  y Selah arma un .zip. En el otro computador, "Abrir un .zip…" → "Traer": lo igual no se toca, lo que cambió se
+  y Selah arma un .zip. En el otro computador, ? → "Traer de otro computador…" → "Abrir un .zip…" → "Traer": lo igual no se toca, lo que cambió se
   reemplaza (antes hace un respaldo). Lo propio de cada computador (pantallas, clave, sonido, celulares aprobados) no viaja.
 - **Quién da el click**: con "Solo el director de alabanza da el click" (encendido de entrada), el click que suena en los
   audífonos lo inician, cambian y paran solo los celulares con papel "Director de alabanza". En el computador (y con la

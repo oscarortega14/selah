@@ -23,7 +23,8 @@ class Transfer(private val baseDir: File) {
     private fun files(p: Part): List<File> = p.paths.flatMap { path ->
         val f = File(baseDir, path)
         when {
-            f.isDirectory -> f.walkTopDown().filter { it.isFile && !it.name.startsWith(".") }.toList()
+            // Nada oculto, tampoco dentro de carpetas ocultas (las páginas ya convertidas, las imágenes de los videos): se rehacen allá.
+            f.isDirectory -> f.walkTopDown().onEnter { it == f || !it.name.startsWith(".") }.filter { it.isFile && !it.name.startsWith(".") }.toList()
             f.isFile -> listOf(f)
             else -> emptyList()
         }

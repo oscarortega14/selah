@@ -11,7 +11,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -36,7 +35,7 @@ import java.util.Locale
 
 /** "Llevar a otro computador": armar un .zip con lo elegido, o traer lo de un .zip a este computador. */
 @Composable
-fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit, onClose: () -> Unit) {
+fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit, onClose: () -> Unit, bring: Boolean = false) {
     val sizes = remember { transfer.sizes() }
     var chosen by remember { mutableStateOf(Transfer.PARTS.filter { it.default && (sizes[it.key]?.files ?: 0) > 0 }.map { it.key }.toSet()) }
     var busy by remember { mutableStateOf(false) }
@@ -52,16 +51,18 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
 
     AlertDialog(
         onDismissRequest = { if (!busy) onClose() },
-        title = { Text("Llevar a otro computador") },
+        title = { Text(if (bring) "Traer de otro computador" else "Llevar a otro computador") },
         text = {
             Column(Modifier.width(560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    "Prepara todo aquí y llévalo al computador de la iglesia: Selah arma un .zip; en el otro computador ábrelo con " +
-                        "esta misma opción (? → Llevar a otro computador → Traer). Lo propio de cada computador (pantallas, clave, " +
-                        "celulares aprobados, sonido) no viaja.",
+                    if (bring) "Abre el .zip que hiciste en el otro computador con «? → Llevar a otro computador». Lo que ya está igual " +
+                        "aquí no se toca, lo que cambió se reemplaza, y antes Selah hace un respaldo de lo que hay."
+                    else "Prepara todo aquí y llévalo al computador de la iglesia: Selah arma un .zip, y en el otro computador lo abres con " +
+                        "«? → Traer de otro computador». Lo propio de cada computador (pantallas, clave, celulares aprobados, sonido) no viaja.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text("Llevar de este computador", fontWeight = FontWeight.Bold)
+                if (!bring) {
+                Text("¿Qué llevas?", fontWeight = FontWeight.Bold)
                 for (p in Transfer.PARTS) {
                     val s = sizes[p.key] ?: Transfer.Summary(0, 0)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -79,21 +80,21 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                     scope.launch(Dispatchers.IO) {
                         val w = work!!
                         runCatching { transfer.export(target, chosen) { d, t, f -> work = w.at(d, t, f) } }
-                            .onSuccess { n -> message = "Listo: «${target.name}» (${n} archivos, ${size(target.length())}). Cópialo al otro computador (memoria USB, Drive…) y ábrelo allá con «Traer»." }
+                            .onSuccess { n -> message = "Listo: «${target.name}» (${n} archivos, ${size(target.length())}). Cópialo al otro computador (memoria USB, Drive…) y ábrelo allá con «? → Traer de otro computador»." }
                             .onFailure { Log.error("No pude armar el .zip", it); message = "No pude armar el .zip: ${it.message}" }
                         busy = false; work = null
                     }
                 }, Modifier.hand(), enabled = !busy && chosen.isNotEmpty()) { Text("Crear el .zip (${size(total)})…") }
                 work?.takeIf { !importing }?.let { WorkProgress(it) }
+                }
 
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                Text("Traer a este computador", fontWeight = FontWeight.Bold)
+                if (bring) {
                 val inc = incoming
                 if (inc == null) {
                     OutlinedButton({
                         val f = chooseOpen() ?: return@OutlinedButton
                         val what = transfer.inspect(f)
-                        if (what == null) message = "«${f.name}» no es un .zip de «Llevar a otro computador»." else { incoming = f to what; message = null }
+                        if (what == null) message = "«${f.name}» no es un .zip hecho con «Llevar a otro computador»." else { incoming = f to what; message = null }
                     }, Modifier.hand(), enabled = !busy) { Text("Abrir un .zip…") }
                 } else {
                     Text("«${inc.first.name}» trae:")
@@ -121,6 +122,7 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                         TextButton({ incoming = null }, Modifier.hand(), enabled = !busy) { Text("Elegir otro") }
                     }
                     work?.takeIf { importing }?.let { WorkProgress(it) }
+                }
                 }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
             }
