@@ -42,6 +42,8 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
     var busy by remember { mutableStateOf(false) }
     // Cómo va: bytes hechos, total, archivo actual y cuándo empezó (para calcular cuánto falta).
     var work by remember { mutableStateOf<Work?>(null) }
+    // Si lo que avanza es "Traer" (su barra va junto a su botón) o "Crear el .zip".
+    var importing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     // El .zip elegido para traer, con lo que trae.
     var incoming by remember { mutableStateOf<Pair<File, Map<String, Transfer.Summary>>?>(null) }
@@ -82,7 +84,7 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                         busy = false; work = null
                     }
                 }, Modifier.hand(), enabled = !busy && chosen.isNotEmpty()) { Text("Crear el .zip (${size(total)})…") }
-                work?.let { WorkProgress(it) }
+                work?.takeIf { !importing }?.let { WorkProgress(it) }
 
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 Text("Traer a este computador", fontWeight = FontWeight.Bold)
@@ -103,18 +105,22 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button({
-                            busy = true; message = null; work = Work("Trayendo")
+                            busy = true; message = null; importing = true
+                            work = Work("Primero, un respaldo de lo que hay en este computador")
                             scope.launch(Dispatchers.IO) {
-                                val w = work!!
-                                runCatching { backups.create(); transfer.import(inc.first) { d, t, f -> work = w.at(d, t, f) } }
+                                runCatching {
+                                    backups.create()
+                                    val w = Work("Trayendo").also { work = it }
+                                    transfer.import(inc.first) { d, t, f -> work = w.at(d, t, f) }
+                                }
                                     .onSuccess { n -> onImported(); message = if (n == 0) "Ya estaba todo igual: no hubo nada que traer." else "Listo: $n archivos traídos." ; incoming = null }
                                     .onFailure { Log.error("No pude traer el .zip", it); message = "No pude traerlo: ${it.message}" }
-                                busy = false; work = null
+                                busy = false; work = null; importing = false
                             }
                         }, Modifier.hand(), enabled = !busy) { Text("Traer") }
                         TextButton({ incoming = null }, Modifier.hand(), enabled = !busy) { Text("Elegir otro") }
                     }
-                    work?.takeIf { it.what == "Trayendo" }?.let { WorkProgress(it) }
+                    work?.takeIf { importing }?.let { WorkProgress(it) }
                 }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
             }
