@@ -39,6 +39,10 @@ data class Theme(
     val bibleVersion: Boolean = true,
     /** Logo de la iglesia para la pantalla de espera: archivo dentro de Selah/fondos. */
     val logo: String? = null,
+    /** Fondo para la Biblia (null = el general). Imagen o video de la carpeta de fondos. */
+    val bibleImage: String? = null,
+    /** Fondo por tipo de canción (línea "Tipo:"): "Adoración" → archivo. Sin entrada = el general. */
+    val typeImages: Map<String, String> = emptyMap(),
 ) {
     companion object {
         /** Fondos de color incluidos (no necesitan archivos). */
@@ -81,8 +85,21 @@ data class Theme(
         image = image?.takeIf { it.isNotBlank() },
         builtin = builtin?.takeIf { key -> BUILTINS.any { it.first == key } },
         logo = logo?.takeIf { it.isNotBlank() },
+        bibleImage = bibleImage?.takeIf { it.isNotBlank() },
+        typeImages = typeImages.filter { (k, v) -> k.isNotBlank() && v.isNotBlank() },
         dim = dim.coerceIn(0f, 0.85f),
         textColor = if (isColor(textColor)) textColor else "#FFFFFF",
         fontScale = fontScale.coerceIn(0.6f, 1.4f),
     )
 }
+
+/**
+ * El fondo de lo que está en pantalla: el propio de la canción ("Fondo:"); si no, el de la Biblia o el del tipo de la
+ * canción ([tags], su línea "Tipo:"); si no, el general ([Theme.image], o null = el incluido o el color).
+ */
+fun Theme.imageFor(state: PresentationState, tags: List<String>): String? =
+    state.background ?: when {
+        state.isBible -> bibleImage
+        else -> tags.firstNotNullOfOrNull { t -> typeImages.entries.firstOrNull { normalizeKey(it.key) == normalizeKey(t) }?.value }
+    } ?: image
+

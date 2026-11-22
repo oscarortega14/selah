@@ -155,6 +155,9 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Modo músico en la app**: al conectarse, la app pregunta "¿Quién usa este celular?". El músico (sin clave) ve la
   canción en pantalla con **su partitura**, **los acordes** (y cambia el tono solo para él) o la letra, más el pulso y
   el click; todo sigue solo al operador. Si quiere iniciar el click o la secuencia, se le pide la clave.
+- **Fondos por canción, por tipo y para la Biblia** (ventana Fondos → "Este fondo es para: Todo · Biblia · Adoración ·
+  Alabanza · … · Esta canción"): manda el más específico (el de la canción, luego el de su `Tipo:` o el de la Biblia, luego
+  el de siempre). En el editor, "Fondo: … ▾" elige el de la canción sin proyectarla.
 - **Partituras** (`Selah/partituras/`): un PDF por canción e instrumento, `Cuán grande es Él - Bajo.pdf` (o una carpeta
   por canción con `Bajo.pdf`, `Teclado.pdf`…); sin instrumento es para todos. Cada músico elige "Toco: Bajo" una vez.
 - **Secuencias** (`Selah/secuencias/`): el audio de la canción en MP3 o WAV con el mismo nombre (`Cuán grande es Él.mp3`).

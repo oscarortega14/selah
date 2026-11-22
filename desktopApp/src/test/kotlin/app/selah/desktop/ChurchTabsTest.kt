@@ -29,3 +29,15 @@ class ScoresAlphabetTest {
         kotlin.test.assertEquals("#", initialOf(""))
     }
 }
+
+class SongBackgroundLineTest {
+    @kotlin.test.Test
+    fun ponerYQuitarElFondoEnElEditor() {
+        val v = androidx.compose.ui.text.input.TextFieldValue("# Luz\nTipo: Alabanza\n\nuno\n")
+        val con = v.withBackground("mar.jpg")
+        kotlin.test.assertEquals("# Luz\nFondo: mar.jpg\nTipo: Alabanza\n\nuno\n", con.text)
+        kotlin.test.assertEquals("mar.jpg", app.selah.shared.SongParser.parse("x", con.text).background)
+        kotlin.test.assertEquals("# Luz\nFondo: otro.mp4\nTipo: Alabanza\n\nuno\n", con.withBackground("otro.mp4").text)
+        kotlin.test.assertEquals("# Luz\nTipo: Alabanza\n\nuno\n", con.withBackground(null).text)
+    }
+}

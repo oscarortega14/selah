@@ -176,7 +176,7 @@ fun main() {
             scope.launch { firewallOk = withContext(Dispatchers.IO) { FirewallSetup.requestRule() } }
         }
         val theme by themes.theme.collectAsState()
-        val look = Look(theme, backgroundFile = { name -> library.backgroundFile(name) }, mediaFile = { name -> library.announcementFile(name) },
+        val look = Look(theme, backgroundFile = { name -> library.backgroundFile(name) }, songTags = { id -> library.song(id)?.tags.orEmpty() }, mediaFile = { name -> library.announcementFile(name) },
             presentationPage = { name, index -> library.presentations.page(name, index) },
             presentationThumb = { name, index -> library.presentations.thumb(name, index) })
 

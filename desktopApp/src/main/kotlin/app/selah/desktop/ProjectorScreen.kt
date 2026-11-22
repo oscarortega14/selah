@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.selah.shared.PresentationState
 import app.selah.shared.Theme
+import app.selah.shared.imageFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -53,6 +54,8 @@ import java.util.concurrent.ConcurrentHashMap
 data class Look(
     val theme: Theme = Theme(),
     val backgroundFile: (String) -> File? = { null },
+    /** Tipos de una canción (línea "Tipo:"), para usar el fondo de su tipo. */
+    val songTags: (String) -> List<String> = { emptyList() },
     /** Si no es null, la animación queda fija en este instante (pruebas y miniaturas). */
     val frozenTime: Float? = null,
     /** Vista previa (miniatura): el video se redibuja menos veces por segundo. */
@@ -74,7 +77,7 @@ fun ProvideLook(look: Look, content: @Composable () -> Unit) = CompositionLocalP
 @Composable
 fun ProjectorScreen(state: PresentationState, modifier: Modifier = Modifier, look: Look = LocalLook.current) {
     val theme = look.theme
-    val imageName = state.background ?: theme.image
+    val imageName = theme.imageFor(state, state.songId?.let(look.songTags).orEmpty())
     val bgFile = imageName?.let(look.backgroundFile)
     // Un video solo se usa si VLC está disponible; si no, se cae al fondo incluido o al color.
     val video = bgFile?.takeIf { isVideoFile(it.name) && VideoBackgrounds.available }

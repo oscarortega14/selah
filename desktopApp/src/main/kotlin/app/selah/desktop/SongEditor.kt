@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -133,6 +134,18 @@ fun SongEditorWindow(
                             TextButton({ value = value.insertBlock("Puente:\n") }) { Text("+ Puente") }
                             TextButton({ value = value.insertBlock("") }) { Text("+ Nueva diapositiva") }
                             TextButton({ value = value.withOrderLine() }) { Text("+ Orden") }
+                            // El fondo de esta canción (línea "Fondo:"), sin tener que proyectarla.
+                            Box {
+                                var menu by remember { mutableStateOf(false) }
+                                val current = remember(value.text) { SongParser.parse("x", value.text).background }
+                                TextButton({ menu = true }) { Text("Fondo: " + (current ?: "el de siempre") + " ▾", maxLines = 1) }
+                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                                    androidx.compose.material3.DropdownMenuItem({ Text("El de siempre (o el de su tipo)") }, { menu = false; value = value.withBackground(null) })
+                                    (library.videos() + library.backgrounds()).forEach { name ->
+                                        androidx.compose.material3.DropdownMenuItem({ Text((if (name == current) "✓ " else "") + name) }, { menu = false; value = value.withBackground(name) })
+                                    }
+                                }
+                            }
                         }
                         Spacer(Modifier.weight(1f))
                         if (songId != null) {
@@ -258,6 +271,14 @@ internal fun nextNumber(text: String, label: String): Int {
 }
 
 /** Agrega (si falta) una línea "Orden:" debajo del título con las secciones actuales. */
+/** Pone (o quita, con null) la línea "Fondo:" justo debajo del título. */
+internal fun TextFieldValue.withBackground(name: String?): TextFieldValue {
+    val lines = text.split('\n').filterNot { Regex("""^\s*fondo\s*:.*$""", RegexOption.IGNORE_CASE).matches(it) }.toMutableList()
+    if (name != null) lines.add(lines.indexOfFirst { it.trimStart().startsWith("#") } + 1, "Fondo: $name")
+    val newText = lines.joinToString("\n")
+    return TextFieldValue(newText, TextRange(minOf(selection.start, newText.length)))
+}
+
 internal fun TextFieldValue.withOrderLine(): TextFieldValue {
     if (text.lineSequence().any { it.trim().startsWith("Orden", ignoreCase = true) && it.contains(':') }) return this
     val labels = SongParser.parse("x", text).slides.sections().map { it.label }.distinct()
