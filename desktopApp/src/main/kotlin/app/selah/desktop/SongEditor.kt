@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -120,10 +121,20 @@ fun SongEditorWindow(
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Fila 1: guardar, cancelar y eliminar (siempre caben). Fila 2: lo que se agrega a la letra (se reparte si no cabe).
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(::save) { Text("Guardar (Ctrl+S)") }
                         OutlinedButton({ if (dirty) confirmDiscard = true else onClose() }) { Text("Cancelar") }
-                        Spacer(Modifier.width(16.dp))
+                        Spacer(Modifier.weight(1f))
+                        if (songId != null) {
+                            OutlinedButton(
+                                { confirmDelete = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            ) { Text("Eliminar", maxLines = 1, softWrap = false) }
+                        }
+                    }
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (sermon) {
                             TextButton({ value = value.insertBlock("Punto ${nextNumber(value.text, "Punto")}:\n") }) { Text("+ Punto") }
                             TextButton({ value = value.insertBlock("Biblia: ") }) { Text("+ Versículo") }
@@ -137,16 +148,10 @@ fun SongEditorWindow(
                             // El fondo de esta canción (línea "Fondo:"), eligiéndolo por su imagen y sin tener que proyectarla.
                             var picking by remember { mutableStateOf(false) }
                             val current = remember(value.text) { SongParser.parse("x", value.text).background }
-                            TextButton({ picking = true }) { Text("Fondo: " + (current ?: "el de siempre") + "…", maxLines = 1) }
+                            OutlinedButton({ picking = true }) {
+                                Text("Fondo: " + (current?.substringBeforeLast('.') ?: "el de siempre") + "…", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            }
                             if (picking) BackgroundPicker(library, current, "Fondo para esta canción", onPick = { name -> value = value.withBackground(name); picking = false }, onClose = { picking = false })
-                        }
-                        Spacer(Modifier.weight(1f))
-                        if (songId != null) {
-                            OutlinedButton(
-                                { confirmDelete = true },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                            ) { Text("Eliminar") }
                         }
                     }
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

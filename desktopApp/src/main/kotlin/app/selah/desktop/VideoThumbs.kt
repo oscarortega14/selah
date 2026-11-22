@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,39 +81,60 @@ fun VideoTile(video: File?) {
     }
 }
 
-/** Elegir un fondo mirando su imagen (videos e imágenes de la carpeta de fondos). [onPick] null = el de siempre. */
+/**
+ * Elegir un fondo mirando su imagen (videos e imágenes de la carpeta de fondos). Tocar uno solo lo marca; se aplica con
+ * "Aceptar". [onPick] null = el de siempre.
+ */
 @Composable
 fun BackgroundPicker(library: Library, current: String?, title: String, onPick: (String?) -> Unit, onClose: () -> Unit) {
     val names = androidx.compose.runtime.remember { library.videos() + library.backgrounds() }
+    // "" = el de siempre; null no se usa (siempre hay algo marcado).
+    var marked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(current ?: "") }
     androidx.compose.ui.window.DialogWindow(
         onCloseRequest = onClose, title = title,
-        state = androidx.compose.ui.window.rememberDialogState(size = androidx.compose.ui.unit.DpSize(900.dp, 700.dp)),
+        state = androidx.compose.ui.window.rememberDialogState(size = androidx.compose.ui.unit.DpSize(940.dp, 720.dp)),
     ) {
         androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
             androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                    Text("Toca el fondo para esta canción. Los que tienen ▶ son videos: en la proyección se mueven.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    androidx.compose.material3.OutlinedButton({ onPick(null) }, Modifier.hand()) { Text((if (current == null) "✓ " else "") + "El de siempre (o el de su tipo)") }
+                    Text("Elige el fondo y dale «Aceptar». Los que tienen ▶ son videos: en la proyección se mueven.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    androidx.compose.material3.FilterChip(marked == "", { marked = "" }, { Text("El de siempre (o el de su tipo)") })
                     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                        androidx.compose.foundation.lazy.grid.GridCells.Adaptive(160.dp), Modifier.fillMaxSize(),
+                        androidx.compose.foundation.lazy.grid.GridCells.Adaptive(165.dp), Modifier.weight(1f).fillMaxWidth(),
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
                     ) {
                         items(names.size) { i ->
                             val name = names[i]
                             val file = library.backgroundFile(name)
                             val shape = RoundedCornerShape(6.dp)
-                            androidx.compose.foundation.layout.Column(Modifier.handClickable { onPick(name) }) {
+                            val on = name == marked
+                            androidx.compose.foundation.layout.Column(Modifier.handClickable { marked = name }) {
                                 Box(
                                     Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(shape)
-                                        .border(if (name == current) 3.dp else 1.dp, if (name == current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, shape),
+                                        .border(if (on) 4.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, shape),
                                 ) {
                                     if (isVideoFile(name)) VideoTile(file)
                                     else rememberBackground(file)?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                                 }
-                                Text((if (name == current) "✓ " else "") + name, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                Text(
+                                    name.substringBeforeLast('.'), style = MaterialTheme.typography.labelMedium, maxLines = 2,
+                                    color = if (on) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Unspecified,
+                                    fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Bold else null,
+                                )
                             }
                         }
+                    }
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "Elegido: " + (marked.ifEmpty { null }?.substringBeforeLast('.') ?: "el de siempre"),
+                            Modifier.weight(1f), maxLines = 1, color = MaterialTheme.colorScheme.primary,
+                        )
+                        androidx.compose.material3.OutlinedButton(onClose, Modifier.hand()) { Text("Cancelar") }
+                        androidx.compose.material3.Button({ onPick(marked.ifEmpty { null }) }, Modifier.hand()) { Text("Aceptar") }
                     }
                 }
             }
