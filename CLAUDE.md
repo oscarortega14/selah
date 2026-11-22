@@ -119,8 +119,9 @@ el .msi se arma en la copia `C:\Users\florg\src\proyecta` (sincronizar desde WSL
 a mano los archivos que el repo ya no tiene). Instalado y probado en ese PC: abre la 3.0.0 con las 38 canciones.
 **Problema encontrado (sin arreglar):** en una pantalla de 1536 px de ancho (1920×1080 al 125 %) la barra de arriba
 (`OperatorScreen.kt`, `TopBar`) no cabe: "Proyección ▾" y "?" quedan fuera de la ventana desde que se agregaron
-"Equipo" y "¿Qué usa tu iglesia?" (en la 2.6.0 sí cabían). Tampoco subidos: iPhone 3.0.0 (30000), AAB de Google Play
-y MSIX de Microsoft Store (cada tienda con permiso del dueño).
+"Equipo" y "¿Qué usa tu iglesia?" (en la 2.6.0 sí cabían). Tampoco subido: MSIX de Microsoft Store (con permiso del dueño). Hecho el 2026-11-22 desde la Mac: iPhone 3.0.0 (30000)
+subido a App Store Connect (TestFlight, sin enviar a revisión) y AAB 3.0.0 (30000) en ~/Desktop/Selah Remoto - Google Play/
+para que el dueño lo suba.
 
 ## En main después de la 2.6.0 (sin publicar; será la 3.0.0 — el dueño la subió de 2.7.0 a 3.0.0 por la cantidad de cambios; iPhone 2.7.0 (20700) quedó en TestFlight)
 - Carrusel de anuncios (`Presenter.startCarousel/tick`, `ClientMessage.StartCarousel/StopCarousel`,
