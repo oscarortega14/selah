@@ -25,6 +25,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.getValue
@@ -207,7 +209,10 @@ fun BackgroundsWindow(
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 if (!VideoBackgrounds.available) {
-                                    "Los videos de fondo no están disponibles en esta instalación (falta el reproductor incluido)."
+                                    if (System.getProperty("os.name").lowercase().contains("mac"))
+                                        "Para que los videos se muevan en la proyección, instala VLC (gratis, videolan.org) y vuelve a abrir Selah. " +
+                                            "Mientras tanto se ven sus imágenes aquí, pero en la proyección sale el fondo de siempre."
+                                    else "Los videos de fondo no están disponibles en esta instalación (falta el reproductor incluido)."
                                 } else if (videos.isEmpty()) {
                                     "Copia loops .mp4 (ej. de open.life.church) en la carpeta de fondos y presiona \"Actualizar\"."
                                 } else "Se reproducen en bucle y sin sonido. Revisa la licencia de cada video si transmiten el culto.",
@@ -261,6 +266,8 @@ fun BackgroundsWindow(
                         Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = MaterialTheme.shapes.small) {
                             ProjectorScreen(preview, look = LocalLook.current.copy(theme = theme, preview = true, songTags = previewTags))
                         }
+                        // Lo de abajo se desplaza (la vista previa queda fija arriba): en pantallas bajas no se corta nada.
+                        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (state.background != null) {
                             Text(
                                 "La canción en pantalla tiene su propio fondo: ${state.background}",
@@ -347,6 +354,7 @@ fun BackgroundsWindow(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                                            }
                     }
                 }
             }
