@@ -65,6 +65,9 @@ private fun UsedFor(where: List<String>) {
     )
 }
 
+/** Página oficial de descarga de VLC (elige sola la versión para Mac o Windows). */
+internal const val VLC_DOWNLOAD = "https://www.videolan.org/vlc/"
+
 /** Para qué es el fondo que se elige. */
 internal enum class BgTarget { ALL, BIBLE, TYPE, SONG }
 
@@ -210,7 +213,7 @@ fun BackgroundsWindow(
                             Text(
                                 if (!VideoBackgrounds.available) {
                                     if (System.getProperty("os.name").lowercase().contains("mac"))
-                                        "Para que los videos se muevan en la proyección, instala VLC (gratis, videolan.org) y vuelve a abrir Selah. " +
+                                        "Para que los videos se muevan en la proyección, instala VLC (es gratis) y vuelve a abrir Selah. " +
                                             "Mientras tanto se ven sus imágenes aquí, pero en la proyección sale el fondo de siempre."
                                     else "Los videos de fondo no están disponibles en esta instalación (falta el reproductor incluido)."
                                 } else if (videos.isEmpty()) {
@@ -219,6 +222,13 @@ fun BackgroundsWindow(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (!VideoBackgrounds.available) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        // En Mac (o un Windows sin el VLC incluido): un botón que abre la página de descarga de VLC.
+                        if (!VideoBackgrounds.available) item(span = { GridItemSpan(maxLineSpan) }) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button({ runCatching { Desktop.getDesktop().browse(java.net.URI(VLC_DOWNLOAD)) } }, Modifier.hand()) { Text("Descargar VLC (gratis)") }
+                                Text("Después de instalarlo, cierra y vuelve a abrir Selah.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                         items(videos, key = { "v:$it" }) { name ->
                             Column {
