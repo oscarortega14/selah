@@ -151,7 +151,11 @@ fun SongEditorWindow(
                             OutlinedButton({ picking = true }) {
                                 Text("Fondo: " + (current?.substringBeforeLast('.') ?: "el de siempre") + "…", maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                             }
-                            if (picking) BackgroundPicker(library, current, "Fondo para esta canción", onPick = { name -> value = value.withBackground(name); picking = false }, onClose = { picking = false })
+                            if (picking) BackgroundPicker(
+                                library, current, preview.title.ifBlank { "Fondo para esta canción" },
+                                onPick = { name -> value = value.withBackground(name); picking = false }, onClose = { picking = false },
+                                slides = (expanded?.slides ?: preview.slides), tags = remember(value.text) { SongParser.parse("x", value.text).tags },
+                            )
                         }
                     }
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.aspectRatio
@@ -86,21 +87,42 @@ fun VideoTile(video: File?) {
  * "Aceptar". [onPick] null = el de siempre.
  */
 @Composable
-fun BackgroundPicker(library: Library, current: String?, title: String, onPick: (String?) -> Unit, onClose: () -> Unit) {
+fun BackgroundPicker(
+    library: Library,
+    current: String?,
+    title: String,
+    onPick: (String?) -> Unit,
+    onClose: () -> Unit,
+    /** La letra de la canción (para la vista previa) y sus tipos (para mostrar el fondo de su tipo si no tiene uno propio). */
+    slides: List<app.selah.shared.Slide> = emptyList(),
+    tags: List<String> = emptyList(),
+) {
     val names = androidx.compose.runtime.remember { library.videos() + library.backgrounds() }
     // "" = el de siempre; null no se usa (siempre hay algo marcado).
     var marked by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(current ?: "") }
+    var slideIndex by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(0) }
+    val parentLook = LocalLook.current
+    // En la vista previa, un video se ve con su imagen (moverlo aquí no hace falta y en Mac puede faltar VLC).
+    val look = parentLook.copy(
+        preview = true,
+        songTags = { tags },
+        backgroundFile = { n ->
+            val f = library.backgroundFile(n)
+            if (f != null && isVideoFile(n)) File(VideoThumbs.dir(f.parentFile), f.name + ".jpg").takeIf { it.isFile } else f
+        },
+    )
     androidx.compose.ui.window.DialogWindow(
         onCloseRequest = onClose, title = title,
-        state = androidx.compose.ui.window.rememberDialogState(size = androidx.compose.ui.unit.DpSize(940.dp, 720.dp)),
+        state = androidx.compose.ui.window.rememberDialogState(size = androidx.compose.ui.unit.DpSize(1300.dp, 760.dp)),
     ) {
         androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {
             androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                     Text("Elige el fondo y dale «Aceptar». Los que tienen ▶ son videos: en la proyección se mueven.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     androidx.compose.material3.FilterChip(marked == "", { marked = "" }, { Text("El de siempre (o el de su tipo)") })
+                    androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)) {
                     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                        androidx.compose.foundation.lazy.grid.GridCells.Adaptive(165.dp), Modifier.weight(1f).fillMaxWidth(),
+                        androidx.compose.foundation.lazy.grid.GridCells.Adaptive(165.dp), Modifier.weight(1f).fillMaxSize(),
                         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
                         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
                     ) {
@@ -124,6 +146,26 @@ fun BackgroundPicker(library: Library, current: String?, title: String, onPick: 
                                 )
                             }
                         }
+                    }
+                    // --- Vista previa: cambia apenas se marca otro fondo ---
+                    androidx.compose.foundation.layout.Column(Modifier.width(440.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                        Text("Vista previa", style = MaterialTheme.typography.titleMedium)
+                        val shown = slides.ifEmpty { listOf(app.selah.shared.Slide(text = "Cuán grande es Él")) }
+                        val idx = slideIndex.coerceIn(0, shown.lastIndex)
+                        val state = app.selah.shared.PresentationState(title = title, slides = shown, index = idx, songId = "vista", background = marked.ifEmpty { null })
+                        androidx.compose.material3.Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9f), shape = RoundedCornerShape(6.dp)) {
+                            ProjectorScreen(state, look = look)
+                        }
+                        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.TextButton({ slideIndex = idx - 1 }, Modifier.hand(), enabled = idx > 0) { Text("◀ Anterior") }
+                            Text("Diapositiva ${idx + 1} de ${shown.size}", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+                            androidx.compose.material3.TextButton({ slideIndex = idx + 1 }, Modifier.hand(), enabled = idx < shown.lastIndex) { Text("Siguiente ▶") }
+                        }
+                        if (marked.isNotEmpty() && isVideoFile(marked)) Text(
+                            "Es un video: en la proyección se mueve (aquí se ve quieto).",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     }
                     androidx.compose.foundation.layout.Row(
                         Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
