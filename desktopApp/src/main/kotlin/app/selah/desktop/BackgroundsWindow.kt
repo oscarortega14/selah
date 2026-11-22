@@ -48,6 +48,21 @@ import app.selah.shared.Theme
 import java.awt.Desktop
 import kotlin.math.roundToInt
 
+/** Dónde se usa un fondo ("Todo", "Biblia", "Alabanza"), para reconocerlo en la lista. */
+internal fun usedFor(theme: Theme, name: String): List<String> = buildList {
+    if (theme.image == name) add("Todo")
+    if (theme.bibleImage == name) add("Biblia")
+    theme.typeImages.filterValues { it == name }.keys.sorted().forEach { add(it) }
+}
+
+@Composable
+private fun UsedFor(where: List<String>) {
+    if (where.isNotEmpty()) Text(
+        "✓ " + where.joinToString(" · "),
+        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1,
+    )
+}
+
 /** Para qué es el fondo que se elige. */
 internal enum class BgTarget { ALL, BIBLE, TYPE, SONG }
 
@@ -202,11 +217,8 @@ fun BackgroundsWindow(
                         }
                         items(videos, key = { "v:$it" }) { name ->
                             Column {
-                                Tile(name, chosen() == name, onClick = { apply(name) }) {
-                                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0xFF1B1B22)), contentAlignment = Alignment.Center) {
-                                        Text("▶", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
-                                    }
-                                }
+                                Tile(name, chosen() == name, onClick = { apply(name) }) { VideoTile(library.backgroundFile(name)) }
+                                UsedFor(usedFor(theme, name))
                             }
                         }
                         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -231,6 +243,7 @@ fun BackgroundsWindow(
                                     val bmp = rememberBackground(library.backgroundFile(name))
                                     if (bmp != null) Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                                 }
+                                UsedFor(usedFor(theme, name))
                                 Row {
                                     TextButton({ themes.update { it.copy(logo = if (it.logo == name) null else name) } }, Modifier.weight(1f)) {
                                         Text(if (theme.logo == name) "✓ Logo" else "Usar de logo", style = MaterialTheme.typography.labelSmall)

@@ -134,18 +134,11 @@ fun SongEditorWindow(
                             TextButton({ value = value.insertBlock("Puente:\n") }) { Text("+ Puente") }
                             TextButton({ value = value.insertBlock("") }) { Text("+ Nueva diapositiva") }
                             TextButton({ value = value.withOrderLine() }) { Text("+ Orden") }
-                            // El fondo de esta canción (línea "Fondo:"), sin tener que proyectarla.
-                            Box {
-                                var menu by remember { mutableStateOf(false) }
-                                val current = remember(value.text) { SongParser.parse("x", value.text).background }
-                                TextButton({ menu = true }) { Text("Fondo: " + (current ?: "el de siempre") + " ▾", maxLines = 1) }
-                                androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-                                    androidx.compose.material3.DropdownMenuItem({ Text("El de siempre (o el de su tipo)") }, { menu = false; value = value.withBackground(null) })
-                                    (library.videos() + library.backgrounds()).forEach { name ->
-                                        androidx.compose.material3.DropdownMenuItem({ Text((if (name == current) "✓ " else "") + name) }, { menu = false; value = value.withBackground(name) })
-                                    }
-                                }
-                            }
+                            // El fondo de esta canción (línea "Fondo:"), eligiéndolo por su imagen y sin tener que proyectarla.
+                            var picking by remember { mutableStateOf(false) }
+                            val current = remember(value.text) { SongParser.parse("x", value.text).background }
+                            TextButton({ picking = true }) { Text("Fondo: " + (current ?: "el de siempre") + "…", maxLines = 1) }
+                            if (picking) BackgroundPicker(library, current, "Fondo para esta canción", onPick = { name -> value = value.withBackground(name); picking = false }, onClose = { picking = false })
                         }
                         Spacer(Modifier.weight(1f))
                         if (songId != null) {

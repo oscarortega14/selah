@@ -51,6 +51,9 @@ dependencies {
     // Audio AAC dentro de .mp4/.m4a (los videos), decodificador puro Java
     implementation("com.tianscar.javasound:javasound-aac:0.9.8")
     implementation("com.tianscar.javasound:javasound-resloader:0.1.3") // lo usa el lector de AAC (se llama directo)
+    // Una imagen de cada video de fondo para elegirlo (sin VLC): decodificador H.264 en Java (licencia BSD)
+    implementation("org.jcodec:jcodec:0.2.5")
+    implementation("org.jcodec:jcodec-javase:0.2.5")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-client-cio:$ktor")
