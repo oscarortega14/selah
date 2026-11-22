@@ -29,8 +29,8 @@ class Transfer(private val baseDir: File) {
         }
     }
 
-    /** Arma el .zip en [target] con las partes [keys]. [progress]: bytes hechos y total. Devuelve cuántos archivos. */
-    fun export(target: File, keys: Set<String>, progress: (Long, Long) -> Unit = { _, _ -> }): Int {
+    /** Arma el .zip en [target] con las partes [keys]. [progress]: bytes hechos, total y el archivo en que va. Devuelve cuántos archivos. */
+    fun export(target: File, keys: Set<String>, progress: (Long, Long, String) -> Unit = { _, _, _ -> }): Int {
         val parts = PARTS.filter { it.key in keys }
         val all = parts.flatMap(::files).distinct()
         val total = all.sumOf { it.length() }.coerceAtLeast(1)
@@ -51,7 +51,7 @@ class Transfer(private val baseDir: File) {
                     while (true) {
                         val n = input.read(buf); if (n < 0) break
                         zip.write(buf, 0, n); done += n
-                        progress(done, total)
+                        progress(done, total, f.relativeTo(baseDir).invariantSeparatorsPath)
                     }
                 }
                 zip.closeEntry()
@@ -80,7 +80,7 @@ class Transfer(private val baseDir: File) {
      * Copia a esta carpeta Selah lo que trae [zip] (solo lo de las partes conocidas, nada fuera de la carpeta). Lo que
      * ya estaba igual no se toca; lo distinto se reemplaza por lo del .zip. Devuelve cuántos archivos copió.
      */
-    fun import(zip: File, progress: (Long, Long) -> Unit = { _, _ -> }): Int {
+    fun import(zip: File, progress: (Long, Long, String) -> Unit = { _, _, _ -> }): Int {
         val root = baseDir.canonicalFile
         var n = 0
         ZipFile(zip).use { z ->
@@ -97,7 +97,7 @@ class Transfer(private val baseDir: File) {
                 val inside = part.paths.any { p -> File(root, p).canonicalFile.let { target == it || target.path.startsWith(it.path + File.separator) } }
                 if (!inside) continue
                 if (target.isFile && target.length() == e.size && e.crc >= 0 && crc(target) == e.crc) {
-                    done += e.size; progress(done, total); continue
+                    done += e.size; progress(done, total, name); continue
                 }
                 target.parentFile.mkdirs()
                 val tmp = File(target.parentFile, ".${target.name}.llegando")
@@ -106,7 +106,7 @@ class Transfer(private val baseDir: File) {
                         while (true) {
                             val r = input.read(buf); if (r < 0) break
                             out.write(buf, 0, r); done += r
-                            progress(done, total)
+                            progress(done, total, name)
                         }
                     }
                 }

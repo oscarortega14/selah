@@ -40,7 +40,8 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
     val sizes = remember { transfer.sizes() }
     var chosen by remember { mutableStateOf(Transfer.PARTS.filter { it.default && (sizes[it.key]?.files ?: 0) > 0 }.map { it.key }.toSet()) }
     var busy by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf<Float?>(null) }
+    // Cómo va: bytes hechos, total, archivo actual y cuándo empezó (para calcular cuánto falta).
+    var work by remember { mutableStateOf<Work?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     // El .zip elegido para traer, con lo que trae.
     var incoming by remember { mutableStateOf<Pair<File, Map<String, Transfer.Summary>>?>(null) }
@@ -72,14 +73,16 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                 Button({
                     val name = "Selah para llevar " + SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date()) + ".zip"
                     val target = chooseSave(name) ?: return@Button
-                    busy = true; progress = 0f; message = "Armando el .zip…"
+                    busy = true; message = null; work = Work("Armando el .zip")
                     scope.launch(Dispatchers.IO) {
-                        runCatching { transfer.export(target, chosen) { d, t -> progress = d.toFloat() / t } }
+                        val w = work!!
+                        runCatching { transfer.export(target, chosen) { d, t, f -> work = w.at(d, t, f) } }
                             .onSuccess { n -> message = "Listo: «${target.name}» (${n} archivos, ${size(target.length())}). Cópialo al otro computador (memoria USB, Drive…) y ábrelo allá con «Traer»." }
                             .onFailure { Log.error("No pude armar el .zip", it); message = "No pude armar el .zip: ${it.message}" }
-                        busy = false; progress = null
+                        busy = false; work = null
                     }
                 }, Modifier.hand(), enabled = !busy && chosen.isNotEmpty()) { Text("Crear el .zip (${size(total)})…") }
+                work?.let { WorkProgress(it) }
 
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 Text("Traer a este computador", fontWeight = FontWeight.Bold)
@@ -100,23 +103,60 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button({
-                            busy = true; progress = 0f; message = "Trayendo…"
+                            busy = true; message = null; work = Work("Trayendo")
                             scope.launch(Dispatchers.IO) {
-                                runCatching { backups.create(); transfer.import(inc.first) { d, t -> progress = d.toFloat() / t } }
+                                val w = work!!
+                                runCatching { backups.create(); transfer.import(inc.first) { d, t, f -> work = w.at(d, t, f) } }
                                     .onSuccess { n -> onImported(); message = if (n == 0) "Ya estaba todo igual: no hubo nada que traer." else "Listo: $n archivos traídos." ; incoming = null }
                                     .onFailure { Log.error("No pude traer el .zip", it); message = "No pude traerlo: ${it.message}" }
-                                busy = false; progress = null
+                                busy = false; work = null
                             }
                         }, Modifier.hand(), enabled = !busy) { Text("Traer") }
                         TextButton({ incoming = null }, Modifier.hand(), enabled = !busy) { Text("Elegir otro") }
                     }
+                    work?.takeIf { it.what == "Trayendo" }?.let { WorkProgress(it) }
                 }
-                progress?.let { LinearProgressIndicator({ it }, Modifier.fillMaxWidth().padding(top = 6.dp)) }
                 message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
             }
         },
         confirmButton = { TextButton(onClose, Modifier.hand(), enabled = !busy) { Text("Cerrar") } },
     )
+}
+
+/** Lo que se está haciendo y cómo va. [done]/[total] en bytes; [file] el archivo actual. */
+internal data class Work(val what: String, val done: Long = 0, val total: Long = 1, val file: String = "", val started: Long = System.currentTimeMillis()) {
+    private var lastShown = 0L
+    /** El nuevo avance, pero a lo sumo 5 veces por segundo (cada 64 KB sería demasiado para la pantalla). */
+    fun at(d: Long, t: Long, f: String): Work {
+        val now = System.currentTimeMillis()
+        if (now - lastShown < 200 && d < t) return this
+        lastShown = now
+        return copy(done = d, total = t.coerceAtLeast(1), file = f).also { it.lastShown = now }
+    }
+    val fraction get() = (done.toDouble() / total).toFloat().coerceIn(0f, 1f)
+    /** "faltan unos 3 min", cuando ya hay con qué calcular. */
+    fun remaining(now: Long = System.currentTimeMillis()): String? {
+        val secs = (now - started) / 1000.0
+        if (secs < 3 || done <= 0) return null
+        val left = (total - done) / (done / secs)
+        return when {
+            left < 60 -> "falta menos de un minuto"
+            Math.round(left / 60) == 1L -> "falta como 1 minuto"
+            else -> "faltan como ${Math.round(left / 60)} minutos"
+        }
+    }
+}
+
+@Composable
+private fun WorkProgress(w: Work) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LinearProgressIndicator({ w.fraction }, Modifier.fillMaxWidth())
+        Text(
+            "${w.what}… ${Math.round(w.fraction * 100)} % · ${size(w.done)} de ${size(w.total)}" + (w.remaining()?.let { " · $it" } ?: ""),
+            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+        )
+        if (w.file.isNotEmpty()) Text(w.file, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
 }
 
 private fun size(bytes: Long): String = when {

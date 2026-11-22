@@ -102,3 +102,21 @@ class TransferTest {
         assertFalse(File(church.parentFile, "fuera.txt").exists())
     }
 }
+
+class TransferProgressTest {
+    @Test
+    fun cuantoVaYCuantoFalta() {
+        val w = Work("Armando el .zip", started = 0)
+        val a = w.at(500, 1000, "secuencias/A.wav")
+        assertEquals(0.5f, a.fraction)
+        assertEquals("secuencias/A.wav", a.file)
+        // Muy seguido: no cambia la pantalla (salvo al terminar)
+        assertTrue(w.at(600, 1000, "secuencias/B.wav") === w)
+        assertEquals(1f, w.at(1000, 1000, "fin").fraction)
+        // A los 60 s lleva la mitad: falta más o menos otro tanto
+        assertEquals("falta como 1 minuto", a.copy(started = 0).remaining(now = 70_000))
+        assertEquals("faltan como 3 minutos", a.copy(started = 0).remaining(now = 180_000))
+        assertEquals("falta menos de un minuto", a.copy(started = 0).remaining(now = 20_000))
+        assertNull(a.copy(started = 0).remaining(now = 1_000)) // muy pronto para calcular
+    }
+}
