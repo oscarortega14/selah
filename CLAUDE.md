@@ -110,6 +110,12 @@ MSIX 2.6.0 → Partner Center "Start update".
 Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
 distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
 
+## Versión 3.0.0: publicada en GitHub (2026-11-22) SIN el .msi
+GitHub Release v3.0.0 (latest) con `Selah-3.0.0.dmg` y `SelahRemoto.apk` (30000, firma 7B:EE…). Falta, desde el PC con
+Windows: `packageMsi` + `java tools/Firma.java firmar` y subir `Selah-3.0.0.msi` y `.msi.sig` a ese mismo Release (hasta
+entonces el actualizador de Windows no ve nada: `Updater.parse` pide el .msi). Tampoco subidos: iPhone 3.0.0 (30000),
+AAB de Google Play y MSIX de Microsoft Store (cada tienda con permiso del dueño).
+
 ## En main después de la 2.6.0 (sin publicar; será la 3.0.0 — el dueño la subió de 2.7.0 a 3.0.0 por la cantidad de cambios; iPhone 2.7.0 (20700) quedó en TestFlight)
 - Carrusel de anuncios (`Presenter.startCarousel/tick`, `ClientMessage.StartCarousel/StopCarousel`,
   `PresentationState.carouselSeconds`, `Library.features` con `FEATURE_CAROUSEL` para que la app solo lo ofrezca
