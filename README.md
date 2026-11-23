@@ -155,6 +155,9 @@ El botón "+ Orden" del editor la agrega con las secciones existentes.
 - **Modo músico en la app**: al conectarse, la app pregunta "¿Quién usa este celular?". El músico (sin clave) ve la
   canción en pantalla con **su partitura**, **los acordes** (y cambia el tono solo para él) o la letra, más el pulso y
   el click; todo sigue solo al operador. Si quiere iniciar el click o la secuencia, se le pide la clave.
+- **Título antes de la letra**: al poner una canción se ve primero su título (la línea `#`) mientras arranca; "Siguiente"
+  pasa a la primera diapositiva y "Anterior" desde ella vuelve al título. No cuenta para tiempos ni secuencias: con la letra
+  automática se quita cuando llega la letra. Se apaga en Fondos ("Título de la canción antes de la letra").
 - **Fondos por canción, por tipo y para la Biblia** (ventana Fondos → "Este fondo es para: Todo · Biblia · Adoración ·
   Alabanza · … · Esta canción"): manda el más específico (el de la canción, luego el de su `Tipo:` o el de la Biblia, luego
   el de siempre). En el editor, "Fondo: … ▾" elige el de la canción sin proyectarla.

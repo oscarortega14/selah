@@ -39,7 +39,7 @@ fun HistoryWindow(history: History, song: (String) -> app.selah.shared.Song?, on
     val entries by history.entries.collectAsState()
     var months by remember { mutableIntStateOf(3) }
     var message by remember { mutableStateOf<String?>(null) }
-    Window(onCloseRequest = onClose, title = "Historial", state = rememberFittedWindowState(DpSize(980.dp, 700.dp))) {
+    Window(icon = appIcon, onCloseRequest = onClose, title = "Historial", state = rememberFittedWindowState(DpSize(980.dp, 700.dp))) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Row(Modifier.fillMaxSize().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {

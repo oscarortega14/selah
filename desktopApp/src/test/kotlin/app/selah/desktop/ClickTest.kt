@@ -151,6 +151,35 @@ class ClickTest {
     }
 
     @Test
+    fun theTitleComesFirstAndDoesNotCountForTheTiming() {
+        File(dir, "canciones/Con tempo.txt").writeText("# Con tempo\nBPM: 120\nTiempos: 0 8 16 24\n\nuno\n\ndos\n\ntres\n\ncuatro\n")
+        library.reload()
+        presenter.titleCardOn = { true }
+        presenter.handle(ClientMessage.SelectSong("Con tempo"))
+        assertTrue(st.titleCard)
+        assertEquals(0, st.index)
+        // "Siguiente" muestra la primera diapositiva (no se salta "uno")
+        presenter.handle(ClientMessage.Next)
+        assertFalse(st.titleCard); assertEquals(0, st.index)
+        presenter.handle(ClientMessage.Next); assertEquals(1, st.index)
+        // "Anterior" desde la primera vuelve al título
+        presenter.handle(ClientMessage.Prev); presenter.handle(ClientMessage.Prev)
+        assertTrue(st.titleCard); assertEquals(0, st.index)
+        // Tocar una diapositiva quita el título
+        presenter.handle(ClientMessage.GoTo(2)); assertFalse(st.titleCard)
+        // Con la letra automática: el título se queda en la cuenta y se va cuando llega la letra (los tiempos no cambian)
+        presenter.handle(ClientMessage.SelectSong("Con tempo"))
+        presenter.handle(ClientMessage.StartClick(lyricsOnly = true))
+        goToBeat(-2.0); assertTrue(st.titleCard)
+        goToBeat(0.0); assertFalse(st.titleCard); assertEquals(0, st.index)
+        goToBeat(8.0); assertEquals(1, st.index)
+        // Apagado: directo a la letra
+        presenter.titleCardOn = { false }
+        presenter.handle(ClientMessage.SelectSong("Con tempo"))
+        assertFalse(st.titleCard)
+    }
+
+    @Test
     fun changingSongWhileRecordingSavesWhatWasRecorded() {
         presenter.handle(ClientMessage.SelectSong("Con tempo"))
         presenter.handle(ClientMessage.StartClick())

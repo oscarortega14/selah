@@ -91,7 +91,8 @@ fun ProjectorScreen(state: PresentationState, modifier: Modifier = Modifier, loo
     val nextPage = state.presentation?.let { look.presentationPage(it, state.index + 1) }
 
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
-        val slide = state.current
+        // El título de la canción antes de la letra: se dibuja como una diapositiva solo con el título.
+        val slide = state.current?.let { if (state.titleCard) app.selah.shared.Slide(text = state.title) else it }
         if (!state.blank) {
             // Un anuncio ocupa toda la pantalla (sin fondo ni letra); la cuenta regresiva y el logo van primero.
             val showMedia = media != null && !state.logo && (seconds == null || seconds <= 0)

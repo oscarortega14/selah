@@ -168,7 +168,7 @@ private fun guideImage(name: String): ImageBitmap? = imageCache.getOrPut(name) {
 /** El asistente de la primera vez (y desde "?" → "Ver la guía"). */
 @Composable
 fun SetupWizard(church: ChurchFeatures, update: ((ChurchFeatures) -> ChurchFeatures) -> Unit, onDone: () -> Unit) {
-    DialogWindow(
+    DialogWindow(icon = appIcon, 
         onCloseRequest = onDone, title = "Configurar Selah", resizable = true,
         state = rememberDialogState(size = DpSize(1000.dp, 700.dp)),
     ) {

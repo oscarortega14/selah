@@ -19,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -111,8 +113,9 @@ fun BackgroundPicker(
             if (f != null && isVideoFile(n)) File(VideoThumbs.dir(f.parentFile), f.name + ".jpg").takeIf { it.isFile } else f
         },
     )
-    androidx.compose.ui.window.DialogWindow(
+    androidx.compose.ui.window.DialogWindow(icon = appIcon, 
         onCloseRequest = onClose, title = title,
+        onPreviewKeyEvent = { e -> if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == androidx.compose.ui.input.key.Key.Escape) { onClose(); true } else false },
         state = androidx.compose.ui.window.rememberDialogState(size = androidx.compose.ui.unit.DpSize(1300.dp, 760.dp)),
     ) {
         androidx.compose.material3.MaterialTheme(colorScheme = androidx.compose.material3.darkColorScheme()) {

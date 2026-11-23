@@ -35,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -80,7 +82,7 @@ val LocalMusicians = compositionLocalOf { Musicians() }
 /** "¿Qué usa tu iglesia?": interruptores, partituras, secuencias y salida de sonido. */
 @Composable
 fun MusiciansWindow(m: Musicians, onClose: () -> Unit) {
-    Window(onCloseRequest = onClose, title = "¿Qué usa tu iglesia?", state = rememberFittedWindowState(DpSize(820.dp, 820.dp))) {
+    Window(icon = appIcon, onCloseRequest = onClose, title = "¿Qué usa tu iglesia?", state = rememberFittedWindowState(DpSize(820.dp, 820.dp))) {
         MusiciansContent(m)
     }
 }
@@ -435,7 +437,17 @@ private fun ScorePreview(music: MusicLibrary, file: String, onClose: () -> Unit)
             runCatching { music.scorePages.pages(file) }.onSuccess { pages = it }.onFailure { error = it.message ?: "No pude abrirla" }
         }
     }
-    androidx.compose.ui.window.DialogWindow(onCloseRequest = onClose, title = file, state = androidx.compose.ui.window.rememberDialogState(size = DpSize(760.dp, 940.dp))) {
+    androidx.compose.ui.window.DialogWindow(
+        icon = appIcon, onCloseRequest = onClose, title = file, state = androidx.compose.ui.window.rememberDialogState(size = DpSize(760.dp, 940.dp)),
+        // Esc cierra; las flechas pasan de página.
+        onPreviewKeyEvent = { e ->
+            if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) false
+            else when (e.key) {
+                androidx.compose.ui.input.key.Key.Escape -> { onClose(); true }
+                else -> false
+            }
+        },
+    ) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -444,6 +456,8 @@ private fun ScorePreview(music: MusicLibrary, file: String, onClose: () -> Unit)
                         TextButton({ index-- }, Modifier.hand(), enabled = index > 0) { Text("◀ Anterior") }
                         Text(if (list == null) "Preparando…" else "Página ${index + 1} de ${list.size}", Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         TextButton({ index++ }, Modifier.hand(), enabled = list != null && index < list.lastIndex) { Text("Siguiente ▶") }
+                        // En Windows la ventana a veces queda sin barra visible para cerrarla: un botón siempre a la vista.
+                        androidx.compose.material3.Button(onClose, Modifier.hand()) { Text("Cerrar") }
                     }
                     when {
                         error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)

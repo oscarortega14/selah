@@ -146,7 +146,7 @@ fun BackgroundsWindow(
         }
     }
 
-    Window(
+    Window(icon = appIcon, 
         onCloseRequest = onClose,
         title = "Fondos y letra",
         state = rememberFittedWindowState(DpSize(1200.dp, 760.dp)),
@@ -357,6 +357,16 @@ fun BackgroundsWindow(
                                 )
                             }
                             Switch(theme.bibleVersion, { v -> themes.update { it.copy(bibleVersion = v) } })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Título de la canción antes de la letra")
+                                Text(
+                                    "Al poner una canción se ve primero su título mientras arranca; «Siguiente» pasa a la letra.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(theme.titleCard, { v -> themes.update { it.copy(titleCard = v) } })
                         }
                         message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                         Text(

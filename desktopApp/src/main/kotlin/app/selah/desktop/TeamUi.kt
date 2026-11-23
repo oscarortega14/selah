@@ -50,7 +50,7 @@ fun Role.description(): String = when (this) {
 /** Ventana "Equipo": aprobar celulares y darles papel e instrumento. */
 @Composable
 fun TeamWindow(team: TeamStore, instruments: List<String>, onClose: () -> Unit) {
-    Window(onCloseRequest = onClose, title = "Equipo", state = rememberFittedWindowState(DpSize(760.dp, 760.dp))) {
+    Window(icon = appIcon, onCloseRequest = onClose, title = "Equipo", state = rememberFittedWindowState(DpSize(760.dp, 760.dp))) {
         TeamContent(team, instruments)
     }
 }

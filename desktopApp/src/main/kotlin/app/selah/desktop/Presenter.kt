@@ -67,10 +67,16 @@ class Presenter(
 
     private fun handleCommand(msg: ClientMessage): String? = when (msg) {
         is ClientMessage.SelectSong -> selectSong(msg.id)
-        is ClientMessage.GoTo -> { manualMove { s -> if (msg.index in s.slides.indices) s.copy(index = msg.index) else s }; null }
+        is ClientMessage.GoTo -> { manualMove { s -> if (msg.index in s.slides.indices) s.copy(index = msg.index, titleCard = false) else s }; null }
         // Con el carrusel andando, Siguiente/Anterior pasan de imagen (y el tiempo vuelve a empezar).
-        ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1) else { manualMove { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
-        ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1) else { manualMove { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
+        // Con el título en pantalla, "Siguiente" muestra la primera diapositiva (no se salta ninguna).
+        ClientMessage.Next -> if (_state.value.carouselSeconds > 0) carouselStep(+1)
+            else if (_state.value.titleCard) { _state.update { it.copy(titleCard = false) }; null }
+            else { manualMove { s -> s.copy(index = (s.index + 1).coerceAtMost(s.slides.lastIndex)) }; null }
+        // En la primera diapositiva de una canción, "Anterior" vuelve al título.
+        ClientMessage.Prev -> if (_state.value.carouselSeconds > 0) carouselStep(-1)
+            else if (_state.value.let { it.index == 0 && !it.titleCard && it.songId != null && !it.isBible && !it.sermon && titleCardOn() }) { _state.update { it.copy(titleCard = true) }; null }
+            else { manualMove { s -> s.copy(index = (s.index - 1).coerceAtLeast(if (s.slides.isEmpty()) -1 else 0)) }; null }
         is ClientMessage.StartClick -> when {
             _state.value.click?.sequence != null -> "Ya suena la secuencia: el click va con ella"
             msg.lyricsOnly && _state.value.click?.let { !it.lyricsOnly } == true -> "El director ya dio el click: la letra va con él"
@@ -341,7 +347,8 @@ class Presenter(
         val c = s.click ?: return
         if (!c.auto || c.recording || c.waiting || !followsThisSong(s)) return
         val target = autoSlide(clickTiming, c.beatAt(clock()) + lyricShift) ?: return
-        if (target != s.index && target in s.slides.indices) _state.update { it.copy(index = target) }
+        // Al llegar la letra, se quita el título.
+        if ((target != s.index || s.titleCard) && target in s.slides.indices) _state.update { it.copy(index = target, titleCard = false) }
     }
 
     private fun selectSong(id: String): String? {
@@ -351,6 +358,8 @@ class Presenter(
                 PresentationState(
                     song.title, song.slides, if (song.slides.isEmpty()) -1 else 0,
                     songId = song.id, background = song.background,
+                    // Primero el título, mientras arranca la canción.
+                    titleCard = song.slides.isNotEmpty() && titleCardOn(),
                 ),
             )
         }
@@ -394,6 +403,9 @@ class Presenter(
 
     /** ¿Se pone la traducción junto a la cita? (opción del tema "Traducción junto a la cita"). */
     var versionOn: () -> Boolean = { true }
+
+    /** Mostrar el título de la canción antes de la letra (Theme.titleCard; Main lo conecta, en las pruebas va apagado). */
+    var titleCardOn: () -> Boolean = { false }
 
     /** La cita que pidieron para la lectura en pantalla (para volver a buscarla si cambian de Biblia). */
     @Volatile private var bibleReference: String? = null

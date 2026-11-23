@@ -43,6 +43,8 @@ data class PresentationState(
     val background: String? = null,
     /** Pantalla de espera: fondo + logo de la iglesia en vez de la letra. */
     val logo: Boolean = false,
+    /** Se ve el título de la canción, antes de la letra (no es una diapositiva: no cuenta para tiempos ni secuencias). */
+    val titleCard: Boolean = false,
     /** Aviso en una franja abajo ("" = sin aviso). Sale encima de la letra, no la reemplaza. */
     val alert: String = "",
     /** Cuenta regresiva activa: termina en este instante (milisegundos de época del PC), o null. */

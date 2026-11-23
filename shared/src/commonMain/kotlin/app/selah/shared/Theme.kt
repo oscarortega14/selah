@@ -37,6 +37,8 @@ data class Theme(
     val shadow: Boolean = true,
     /** Poner la traducción junto a la cita de la Biblia ("Josué 1:9 - NTV"). */
     val bibleVersion: Boolean = true,
+    /** Al poner una canción, primero su título (mientras arranca); "Siguiente" pasa a la letra. */
+    val titleCard: Boolean = true,
     /** Logo de la iglesia para la pantalla de espera: archivo dentro de Selah/fondos. */
     val logo: String? = null,
     /** Fondo para la Biblia (null = el general). Imagen o video de la carpeta de fondos. */

@@ -106,7 +106,7 @@ fun SongEditorWindow(
         }
     }
 
-    Window(
+    Window(icon = appIcon, 
         onCloseRequest = { if (dirty) confirmDiscard = true else onClose() },
         title = when {
             songId == null && sermon -> "Nueva predicación"

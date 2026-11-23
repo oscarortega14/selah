@@ -85,6 +85,7 @@ fun main() {
     val discovery = DiscoveryResponder().also { runCatching { it.start() } }
     val themes = ThemeStore(File(library.baseDir, "tema.json"))
     presenter.versionOn = { themes.theme.value.bibleVersion }
+    presenter.titleCardOn = { themes.theme.value.titleCard }
 
     application {
         val state by presenter.state.collectAsState()

@@ -258,7 +258,7 @@ private fun Picker(shown: String, warning: String?, options: List<Pair<String, S
 @Composable
 fun ServicesWindow(worship: Worship, onClose: () -> Unit) {
     val cfg = worship.config
-    Window(onCloseRequest = onClose, title = "Cultos de la iglesia", state = rememberFittedWindowState(DpSize(860.dp, 760.dp))) {
+    Window(icon = appIcon, onCloseRequest = onClose, title = "Cultos de la iglesia", state = rememberFittedWindowState(DpSize(860.dp, 760.dp))) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
