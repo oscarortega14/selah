@@ -17,8 +17,14 @@ private object App {
     val client by lazy { RemoteClient(MainScope()).also { it.useStore(store) } }
 }
 
-fun MainViewController(): UIViewController =
-    ComposeUIViewController { SelahRemoto(App.client, App.store, App.linkHost) }
+fun MainViewController(): UIViewController {
+    // Capturas para la App Store en el simulador: SIMCTL_CHILD_SELAH_DEMO=1 abre directo la demostración.
+    if (platform.Foundation.NSProcessInfo.processInfo.environment["SELAH_DEMO"] != null) {
+        App.store.put("host" to "demo", "name" to "Demostración")
+        App.client.startDemo()
+    }
+    return ComposeUIViewController { SelahRemoto(App.client, App.store, App.linkHost) }
+}
 
 /** Enlace selah://connect?host=…&pin=… abierto desde Safari o la cámara (QR). */
 fun openUrl(url: String) {

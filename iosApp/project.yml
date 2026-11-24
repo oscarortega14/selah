@@ -1,4 +1,4 @@
-# Proyecto de Xcode para Selah Remoto en iPhone (iPad: más adelante).
+# Proyecto de Xcode para Selah Remoto en iPhone y iPad.
 # Se genera con XcodeGen (brew install xcodegen):   cd iosApp && xcodegen
 # Luego abrir SelahRemoto.xcodeproj. Ver docs/IOS.md.
 name: SelahRemoto
@@ -11,8 +11,8 @@ options:
 settings:
   base:
     # Misma versión que el PC y Android (gradle.properties → selah.version)
-    MARKETING_VERSION: "3.0.0"
-    CURRENT_PROJECT_VERSION: "30000"
+    MARKETING_VERSION: "3.0.1"
+    CURRENT_PROJECT_VERSION: "30001"
     # Escribe aquí tu Team ID de Apple (developer.apple.com → Membership), o elígelo en Xcode
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
@@ -20,13 +20,15 @@ targets:
   SelahRemoto:
     type: application
     platform: iOS
+    scheme:
+      testTargets: [SelahRemotoCapturas]
     sources:
       - SelahRemoto
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.selah.remote
         PRODUCT_NAME: SelahRemoto
-        TARGETED_DEVICE_FAMILY: "1" # solo iPhone por ahora (iPad exige sus propias capturas y revisión de diseño)
+        TARGETED_DEVICE_FAMILY: "1,2" # iPhone y iPad
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # El framework de Kotlin lo deja aquí la tarea embedAndSignAppleFrameworkForXcode
         FRAMEWORK_SEARCH_PATHS: ["$(inherited)", "$(SRCROOT)/../remoteUi/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"]
@@ -71,3 +73,15 @@ targets:
           fi
           cd "$SRCROOT/.."
           ./gradlew :remoteUi:embedAndSignAppleFrameworkForXcode
+  # Capturas para la App Store: TEST_RUNNER_CAPTURAS_DIR=carpeta xcodebuild test … -only-testing:SelahRemotoCapturas
+  SelahRemotoCapturas:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SelahRemotoCapturas]
+    dependencies:
+      - target: SelahRemoto
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.selah.remote.capturas
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"

@@ -368,7 +368,7 @@ fun BackgroundsWindow(
                             }
                             Switch(theme.titleCard, { v -> themes.update { it.copy(titleCard = v) } })
                         }
-                        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+                        message?.let { Text(it, Modifier.showWhen(it), color = MaterialTheme.colorScheme.primary) }
                         Text(
                             "Los cambios se ven al instante en el videobeam. \"Pantalla negra\" sigue siendo negro total.",
                             style = MaterialTheme.typography.bodySmall,

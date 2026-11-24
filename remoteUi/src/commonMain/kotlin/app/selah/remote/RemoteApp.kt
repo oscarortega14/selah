@@ -64,6 +64,9 @@ import app.selah.shared.ServerMessage
 import app.selah.shared.ServicePlanState
 import app.selah.shared.PlanKind
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.BoxWithConstraints
 
 @Composable
 internal fun RemoteApp(
@@ -151,14 +154,21 @@ internal fun RemoteApp(
         }
         // Ojo: nada de "return" temprano dentro de Column (es inline y rompe la recomposición).
         if (editingHost) {
-            SearchScreen(
-                client,
-                onDemo = { client.startDemo(); tab = 0; editingHost = false },
-            ) { server -> editingHost = false; onConnect(server) }
+            Readable {
+                SearchScreen(
+                    client,
+                    onDemo = { client.startDemo(); tab = 0; editingHost = false },
+                ) { server -> editingHost = false; onConnect(server) }
+            }
         } else if (musicianMode) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (pcRole != null) "🎵 ${pcRole.label}" else "🎵 Modo músico", Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                if (!rolesOnPc) TextButton({ setRole("operador"); tab = 0 }) { Text("Soy el operador") }
+            // En iPad o tablet no va la fila "🎵 Músico": más espacio para la partitura (queda "Soy el operador" si hace falta).
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val wide = maxWidth >= WIDE
+                if (!wide || !rolesOnPc) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!wide) Text(if (pcRole != null) "🎵 ${pcRole.label}" else "🎵 Modo músico", Modifier.weight(1f), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    else androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    if (!rolesOnPc) TextButton({ setRole("operador"); tab = 0 }) { Text("Soy el operador") }
+                }
             }
             Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp)) {
                 MusicianView(
@@ -173,17 +183,12 @@ internal fun RemoteApp(
             }
         } else {
             // El PC tiene cosas para los músicos y este celular no ha dicho quién lo usa: se pregunta una vez.
-            if (!rolesOnPc && musicians && role == null) RoleChooser(onOperator = { setRole("operador") }, onMusician = { setRole("musico") })
+            if (!rolesOnPc && musicians && role == null) Readable { RoleChooser(onOperator = { setRole("operador") }, onMusician = { setRole("musico") }) }
             val tabNames = listOf("En pantalla", "Canciones", "Biblia", "Lista", "Más") + if (musicians) listOf("Músicos") else emptyList()
             if (tab >= tabNames.size) tab = 0
-            // Desplazable: en celulares angostos las pestañas no parten las palabras.
-            ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
-                tabNames.forEachIndexed { i, title ->
-                    Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, maxLines = 1, softWrap = false) })
-                }
-            }
-            Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) {
-                when (tab) {
+            // Una pestaña. [goLive]: lo que pasa al proyectar algo (en el celular, ir a "En pantalla").
+            val page: @Composable (Int, () -> Unit) -> Unit = { i, goLive ->
+                when (i) {
                     0 -> {
                         // Click de los músicos: solo con un PC que lo entiende.
                         if (app.selah.shared.FEATURE_CLICK in features || app.selah.shared.FEATURE_SEQUENCES in features) ClickPanel(
@@ -194,7 +199,7 @@ internal fun RemoteApp(
                         LiveTab(state, client::send)
                     }
                     1 -> SongsTab(songs, songResults, repeatDays, onSearch = { q -> client.send(ClientMessage.SongSearch(q)) }, onAdd = { id -> client.send(ClientMessage.PlanAddSong(id)) }) { id ->
-                        client.send(ClientMessage.SelectSong(id)); tab = 0
+                        client.send(ClientMessage.SelectSong(id)); goLive()
                     }
                     2 -> BibleTab(
                         bibleName, bibleBooks, bibleChapter, bibleResults, bibleNav,
@@ -209,15 +214,15 @@ internal fun RemoteApp(
                         onShow = { ref, slide ->
                             client.send(ClientMessage.ShowBible(ref))
                             if (slide > 0) client.send(ClientMessage.GoTo(slide))
-                            tab = 0
+                            goLive()
                         },
                     )
-                    3 -> PlanTab(plan, savedLists, state.stageMessage, client::send, todayService) { tab = 0 }
+                    3 -> PlanTab(plan, savedLists, state.stageMessage, client::send, todayService) { goLive() }
                     4 -> MoreTab(
                         state, announcements, presentations, sermons, client.serverOffset, client::send,
                         onUpload = client::uploadAnnouncement,
                         carouselAvailable = app.selah.shared.FEATURE_CAROUSEL in features,
-                    ) { tab = 0 }
+                    ) { goLive() }
                     5 -> MusicianView(
                         client, state, features, scores, sequences, instrument,
                         onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
@@ -225,8 +230,52 @@ internal fun RemoteApp(
                     )
                 }
             }
-            if (tab != 5) Controls(state, client::send)
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                if (maxWidth >= WIDE) {
+                    // iPad o tablet: a la izquierda se elige, a la derecha siempre se ve lo que está en pantalla.
+                    val left = if (tab == 0) 1 else tab
+                    Row(Modifier.fillMaxSize()) {
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            ScrollableTabRow(selectedTabIndex = left - 1, edgePadding = 0.dp) {
+                                tabNames.drop(1).forEachIndexed { k, title ->
+                                    Tab(selected = left == k + 1, onClick = { tab = k + 1 }, text = { Text(title, maxLines = 1, softWrap = false) })
+                                }
+                            }
+                            Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) { page(left) {} }
+                        }
+                        androidx.compose.material3.VerticalDivider()
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
+                            Text(
+                                "En pantalla", Modifier.padding(start = 16.dp, top = 14.dp, end = 16.dp),
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) { page(0) {} }
+                            Controls(state, client::send)
+                        }
+                    }
+                } else Column(Modifier.fillMaxSize()) {
+                    // Desplazable: en celulares angostos las pestañas no parten las palabras.
+                    ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp) {
+                        tabNames.forEachIndexed { i, title ->
+                            Tab(selected = tab == i, onClick = { tab = i }, text = { Text(title, maxLines = 1, softWrap = false) })
+                        }
+                    }
+                    Column(Modifier.weight(1f).fillMaxWidth().padding(12.dp)) { page(tab) { tab = 0 } }
+                    if (tab != 5) Controls(state, client::send)
+                }
+            }
         }
+    }
+}
+
+/** Desde este ancho (iPad, tablet) el operador ve dos paneles. */
+internal val WIDE = 800.dp
+
+/** Texto para leer: en pantallas grandes, centrado y de un ancho cómodo (no de lado a lado). */
+@Composable
+internal fun Readable(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.widthIn(max = 640.dp).fillMaxWidth()) { content() }
     }
 }
 

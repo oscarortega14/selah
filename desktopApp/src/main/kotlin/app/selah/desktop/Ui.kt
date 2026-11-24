@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -99,3 +103,14 @@ fun Slider(
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
 ) = M3Slider(value, onValueChange, modifier.hand(enabled), enabled, valueRange, colors = SliderDefaults.colors())
+
+/**
+ * Cuando aparece o cambia [key] (y no es null), mueve el desplazamiento para que esto se vea: el avance de un proceso o
+ * el mensaje de "Listo" no quedan escondidos arriba o abajo. Si ya se ve, no mueve nada.
+ */
+@Composable
+fun Modifier.showWhen(key: Any?): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(key) { if (key != null) requester.bringIntoView() }
+    return bringIntoViewRequester(requester)
+}

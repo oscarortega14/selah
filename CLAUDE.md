@@ -110,6 +110,22 @@ MSIX 2.6.0 → Partner Center "Start update".
 Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
 distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
 
+## Versión 3.0.1 (2026-11-24): iPad y tablets, desplazamiento automático en el PC
+- 3.0.0 aprobada en Microsoft Store, App Store y Google Play (2026-11-23).
+- **iPad**: `TARGETED_DEVICE_FAMILY "1,2"` (app universal, un solo build). Desde `WIDE` = 800 dp de ancho
+  (`RemoteApp.kt`), el operador ve dos paneles (izquierda: Canciones/Biblia/Lista/Más/Músicos; derecha: siempre
+  "En pantalla" + ◀ Negro ▶) y el músico tiene título + todos los controles en una sola fila y sin la fila
+  "🎵 Músico" (`MusicianView.kt`). `Readable` centra la búsqueda del PC y "¿Quién usa este celular?" a 640 dp.
+  Vale igual para tablets Android (mismo código).
+- Capturas de App Store para iPad 13": prueba de interfaz `iosApp/SelahRemotoCapturas` (abre la demostración con
+  `SIMCTL_CHILD_SELAH_DEMO=1`/`launchEnvironment`, recorre pestañas, gira el iPad):
+  `TEST_RUNNER_CAPTURAS_DIR=carpeta xcodebuild test -project iosApp/SelahRemoto.xcodeproj -scheme SelahRemoto -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' -only-testing:SelahRemotoCapturas`
+  (la horizontal sale girada: `sips -r 270`). `IosEntry.kt` lee `SELAH_DEMO` (solo se puede poner desde Xcode).
+- Escritorio: `Modifier.showWhen(key)` (`Ui.kt`) desplaza hasta el avance o el mensaje de "Listo" cuando aparece
+  (Llevar/Traer, letra automática junto a la canción, partituras, secuencias, voz guía, fondos).
+- Subido: iPhone/iPad 3.0.1 (30001) a App Store Connect. Falta (con permiso del dueño): ficha 3.0.1 con capturas de
+  iPad y enviar a revisión; AAB 3.0.1 para Google Play; .msi/.dmg 3.0.1 en GitHub y MSIX para Microsoft Store.
+
 ## Versión 3.0.0: publicada en GitHub (2026-11-22), con el .msi
 GitHub Release v3.0.0 (latest) con `Selah-3.0.0.dmg`, `SelahRemoto.apk` (30000, firma 7B:EE…), `Selah-3.0.0.msi` y
 `Selah-3.0.0.msi.sig` (el .msi se armó y firmó en el PC con Windows el 2026-11-22: 304 pruebas de `desktopApp` bien,

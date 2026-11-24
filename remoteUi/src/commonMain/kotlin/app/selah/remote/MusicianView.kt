@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -102,6 +103,25 @@ fun MusicianView(
     val view = views.firstOrNull { it.name == chosen } ?: views.first()
     val transpose = remember { mutableStateMapOf<String, Int>() }
 
+    // La partitura: tamaño y si pasa las páginas sola con la letra (se recuerda en este aparato).
+    var zoom by rememberSaveable { mutableStateOf(1f) }
+    var autoPages by remember { mutableStateOf(prefs?.get("paginasSolas") != "no") }
+    val toggleAuto: () -> Unit = { autoPages = !autoPages; prefs?.put("paginasSolas" to if (autoPages) "si" else "no") }
+    val instruments = instrumentsOf(scores).filter { it != GENERAL_INSTRUMENT }
+    val showInstruments = FEATURE_SCORES in features && instruments.isNotEmpty()
+    val instrumentChips: @Composable () -> Unit = {
+        instruments.forEach { i ->
+            val mine = suggestedInstrument.equals(i, ignoreCase = true)
+            FilterChip(instrument.equals(i, ignoreCase = true), { onInstrument(if (instrument.equals(i, true)) null else i) }, { Text(if (mine) "★ $i" else i) })
+        }
+    }
+    val viewChips: @Composable () -> Unit = { views.forEach { v -> FilterChip(v == view, { chosen = v.name }, { Text(v.label) }) } }
+    val sizeChips: @Composable () -> Unit = { ZOOMS.forEach { (z, label) -> FilterChip(zoom == z, { zoom = z }, { Text(label) }) } }
+    val autoChip: @Composable () -> Unit = { FilterChip(autoPages, toggleAuto, { Text("Pasar páginas solo") }) }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // iPad o tablet: el título en una línea y todos los controles en una sola fila, para que quepa más partitura.
+    val wide = maxWidth >= WIDE
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || state.click != null)) {
             ClickPanel(
@@ -111,39 +131,62 @@ fun MusicianView(
                 canControl = canControl, onNeedPin = onNeedPin, controls = showControls,
             )
         }
-        Text(
-            state.title.ifEmpty { "Esperando la canción…" },
-            style = MaterialTheme.typography.titleLarge, maxLines = 1,
-        )
-        state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
-        val instruments = instrumentsOf(scores).filter { it != GENERAL_INSTRUMENT }
-        if (FEATURE_SCORES in features && instruments.isNotEmpty()) {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                item { Text("Toco:", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(instruments) { i ->
-                    val mine = suggestedInstrument.equals(i, ignoreCase = true)
-                    FilterChip(instrument.equals(i, ignoreCase = true), { onInstrument(if (instrument.equals(i, true)) null else i) }, { Text(if (mine) "★ $i" else i) })
+        if (wide) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(state.title.ifEmpty { "Esperando la canción…" }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1) }
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                var first = true
+                val group: @Composable (@Composable () -> Unit) -> Unit = { chips ->
+                    if (!first) androidx.compose.material3.VerticalDivider(Modifier.height(28.dp).padding(horizontal = 6.dp))
+                    first = false
+                    chips()
+                }
+                if (showInstruments) group(instrumentChips)
+                if (views.size > 1) group(viewChips)
+                if (view == MusicView.SCORE) { group(sizeChips); group(autoChip) }
+            }
+        } else {
+            Text(
+                state.title.ifEmpty { "Esperando la canción…" },
+                style = MaterialTheme.typography.titleLarge, maxLines = 1,
+            )
+            state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
+            if (showInstruments) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Toco:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    instrumentChips()
                 }
             }
-        }
-        if (views.size > 1) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                views.forEach { v -> FilterChip(v == view, { chosen = v.name }, { Text(v.label) }) }
+            if (views.size > 1) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { viewChips() }
+            if (view == MusicView.SCORE) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Tamaño:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    sizeChips()
+                }
+                autoChip()
             }
         }
         when (view) {
             MusicView.SCORE -> ScoreView(
                 client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null,
-                index = state.index, slideCount = state.slides.size, prefs = prefs,
+                index = state.index, slideCount = state.slides.size, prefs = prefs, zoom = zoom, autoPages = autoPages,
             )
             MusicView.CHORDS -> ChordsView(state, transpose[songId] ?: 0) { songId?.let { id -> transpose[id] = it } }
             MusicView.LYRICS -> LyricsView(state)
         }
     }
+    }
 }
 
+private val ZOOMS = listOf(1f to "Normal", 1.5f to "Grande", 2f to "Muy grande")
+
 @Composable
-private fun ScoreView(client: RemoteClient, file: String, note: String?, index: Int, slideCount: Int, prefs: KeyValueStore?) {
+private fun ScoreView(client: RemoteClient, file: String, note: String?, index: Int, slideCount: Int, prefs: KeyValueStore?, zoom: Float, autoPages: Boolean) {
     // Páginas que van llegando (la primera se ve sin esperar las demás).
     val pages by produceState<List<ImageBitmap>?>(null, file) {
         value = null
@@ -157,9 +200,7 @@ private fun ScoreView(client: RemoteClient, file: String, note: String?, index: 
         }
         if (loaded.isEmpty()) value = emptyList()
     }
-    var zoom by rememberSaveable { mutableStateOf(1f) }
-    // Pasar las páginas solas con la letra (y lo que el músico corrigió para esta partitura).
-    var autoPages by remember { mutableStateOf(prefs?.get("paginasSolas") != "no") }
+    // Lo que el músico corrigió para esta partitura (qué página va con cada diapositiva).
     var marks by remember(file) { mutableStateOf(parsePageMarks(prefs?.get("paginas:$file"))) }
     val listState = rememberLazyListState()
     val pageCount = pages?.size ?: 0
@@ -185,14 +226,7 @@ private fun ScoreView(client: RemoteClient, file: String, note: String?, index: 
         }
     }
     note?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Tamaño:", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        listOf(1f to "Normal", 1.5f to "Grande", 2f to "Muy grande").forEach { (z, label) -> FilterChip(zoom == z, { zoom = z }, { Text(label) }) }
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        FilterChip(autoPages, { autoPages = !autoPages; prefs?.put("paginasSolas" to if (autoPages) "si" else "no") }, { Text("Pasar páginas solo") })
-        if (marks.isNotEmpty()) TextButton({ marks = emptyMap(); prefs?.put("paginas:$file" to "") }) { Text("Olvidar mis correcciones") }
-    }
+    if (marks.isNotEmpty()) TextButton({ marks = emptyMap(); prefs?.put("paginas:$file" to "") }) { Text("Olvidar mis correcciones") }
     val list = pages
     when {
         list == null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -124,7 +124,7 @@ fun TransferDialog(transfer: Transfer, backups: Backups, onImported: () -> Unit,
                     work?.takeIf { importing }?.let { WorkProgress(it) }
                 }
                 }
-                message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+                message?.let { Text(it, Modifier.showWhen(it), color = MaterialTheme.colorScheme.tertiary) }
             }
         },
         confirmButton = { TextButton(onClose, Modifier.hand(), enabled = !busy) { Text("Cerrar") } },
@@ -157,7 +157,7 @@ internal data class Work(val what: String, val done: Long = 0, val total: Long =
 
 @Composable
 private fun WorkProgress(w: Work) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).showWhen(w.what), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         LinearProgressIndicator({ w.fraction }, Modifier.fillMaxWidth())
         Text(
             "${w.what}… ${Math.round(w.fraction * 100)} % · ${size(w.done)} de ${size(w.total)}" + (w.remaining()?.let { " · $it" } ?: ""),

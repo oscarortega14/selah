@@ -213,8 +213,8 @@ private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
             "a varios minutos por canción, según el computador. Lo que saca queda como «sugerido»: revísalo en un ensayo.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    // Mientras trabaja, lo que va haciendo sale junto a la canción; arriba queda el resultado.
-    if (running == null) status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+    // La última canción trabajada: lo que va haciendo y el resultado salen junto a ella (no arriba, escondidos).
+    var last by remember { mutableStateOf(busy?.first) }
     androidx.compose.material3.OutlinedTextField(
         query, { query = it }, singleLine = true, placeholder = { Text("Busca la canción") },
         modifier = Modifier.fillMaxWidth().marksTyping(),
@@ -223,7 +223,7 @@ private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
     shown.take(60).forEach { s ->
         val state = remember(s.id, done, m.suggested) { m.autoState(s.id) }
         val busy = running == s.id
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.showWhen(if (s.id == last) running to (running == null) else null), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             // Mientras Selah escucha la grabación de esta canción: una rueda girando junto a ella y lo que va haciendo.
             if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
             Column(Modifier.weight(1f)) {
@@ -237,11 +237,12 @@ private fun AutoLyricsTab(m: Musicians, busy: Pair<String, String>? = null) {
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
+                if (!busy && s.id == last) status?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.tertiary) }
             }
-            if (s.id in m.suggested) TextButton({ status = m.undoSuggestion(s.id) ?: "Listo: «${s.title}» quedó como estaba"; done++ }, Modifier.hand(), enabled = running == null) { Text("Deshacer") }
+            if (s.id in m.suggested) TextButton({ last = s.id; status = m.undoSuggestion(s.id) ?: "Listo: «${s.title}» quedó como estaba"; done++ }, Modifier.hand(), enabled = running == null) { Text("Deshacer") }
             OutlinedButton({
                 val file = pickFile("Video o audio de «${s.title}»", RecordingAudio.EXTENSIONS) ?: return@OutlinedButton
-                running = s.id
+                running = s.id; last = s.id
                 status = null
                 scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                     runCatching { recording.run(s.id, file) { st -> status = st } }
@@ -311,7 +312,7 @@ private fun ScoresSection(m: Musicians) {
         OutlinedButton({ music?.let { message = addFiles("Agregar partituras (PDF)", setOf("pdf")) { f -> it.addScores(f) }; m.refreshMusic() } }, Modifier.hand()) { Text("Agregar PDFs…") }
         TextButton({ music?.scoresDir?.let { d -> d.mkdirs(); runCatching { java.awt.Desktop.getDesktop().open(d) } } }, Modifier.hand()) { Text("Abrir carpeta") }
     }
-    message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+    message?.let { Text(it, Modifier.showWhen(it), color = MaterialTheme.colorScheme.tertiary) }
     val scores = m.catalog.scores
     if (scores.isEmpty() && m.catalog.scoreOrphans.isEmpty()) { Text("Todavía no hay partituras.", color = MaterialTheme.colorScheme.onSurfaceVariant); return }
     val allIds = remember(scores) { scores.map { it.songId }.distinct() }
@@ -550,7 +551,7 @@ private fun SequencesSection(m: Musicians, devices: List<String>) {
         OutlinedButton({ m.music?.let { message = addFiles("Agregar secuencias (MP3 o WAV)", MusicLibrary.SEQUENCE_EXTENSIONS) { f -> it.addSequences(f) } } }, Modifier.hand()) { Text("Agregar audios…") }
         TextButton({ m.music?.sequencesDir?.let { d -> d.mkdirs(); runCatching { java.awt.Desktop.getDesktop().open(d) } } }, Modifier.hand()) { Text("Abrir carpeta") }
     }
-    message?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+    message?.let { Text(it, Modifier.showWhen(it), color = MaterialTheme.colorScheme.tertiary) }
 
     // ¿Dónde suena? Si es en otro aparato, Selah solo sigue el tiempo (letra y partituras), sin sonido.
     Text("¿Dónde suena la secuencia?", fontWeight = FontWeight.Bold)
@@ -682,7 +683,7 @@ private fun GuideSection(m: Musicians) {
             }, Modifier.hand(), enabled = !running && pending.isNotEmpty()) {
                 Text(if (pending.isEmpty()) "Todas las canciones con secuencia ya tienen tiempos" else "Sugerir tiempos (${pending.size} canciones sin tiempos)")
             }
-            status?.let { Text(it, color = MaterialTheme.colorScheme.tertiary) }
+            status?.let { Text(it, Modifier.showWhen(running to results), color = MaterialTheme.colorScheme.tertiary) }
             results.filter { !it.ok }.forEach { Text("✗ ${it.title}: ${it.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             if (m.suggested.isNotEmpty()) {
                 Text("Sugeridas, sin revisar (${m.suggested.size}):", fontWeight = FontWeight.Bold)

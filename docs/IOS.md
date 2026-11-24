@@ -50,6 +50,7 @@ módulo compartido `remoteUi/` (Compose Multiplatform). Ya está hecho y probado
    terminal (`xcodebuild archive` + `-exportArchive` con `method=app-store-connect`, `destination=upload`;
    el ExportOptions.plist con el Team ID queda fuera del repo). Cada subida nueva necesita otro
    `CURRENT_PROJECT_VERSION` en `project.yml`. Faltan: capturas 6,9", ficha, video para el revisor.
+   **iPad desde la 3.0.1 (30001):** app universal; capturas de iPad 13" con la prueba `SelahRemotoCapturas` (ver CLAUDE.md).
 
 ---
 
