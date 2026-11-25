@@ -123,8 +123,13 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   (la horizontal sale girada: `sips -r 270`). `IosEntry.kt` lee `SELAH_DEMO` (solo se puede poner desde Xcode).
 - Escritorio: `Modifier.showWhen(key)` (`Ui.kt`) desplaza hasta el avance o el mensaje de "Listo" cuando aparece
   (Llevar/Traer, letra automática junto a la canción, partituras, secuencias, voz guía, fondos).
-- Subido: iPhone/iPad 3.0.1 (30001) a App Store Connect. Falta (con permiso del dueño): ficha 3.0.1 con capturas de
-  iPad y enviar a revisión; AAB 3.0.1 para Google Play; .msi/.dmg 3.0.1 en GitHub y MSIX para Microsoft Store.
+- 2026-11-25: iPhone/iPad 3.0.1 enviada a revisión en App Store; AAB 3.0.1 (30001, ya con R8: `isMinifyEnabled` +
+  `proguard-rules.pro`, Play lo exige desde feb 2027) enviada a revisión en Google Play. GitHub Release v3.0.1 (latest)
+  publicada con `Selah-3.0.1.dmg` y `SelahRemoto.apk` (30001, firma 7B:EE…, probado: el actualizador ofuscado ve y
+  descarga la versión nueva). **Falta en el PC con Windows:** `packageMsi` 3.0.1, firmarlo con `tools/Firma.java`,
+  subir `Selah-3.0.1.msi` y `.msi.sig` al Release v3.0.1 (y quitar de sus notas la línea "se agrega en unos días");
+  `packageMsix` 3.0.1 → Partner Center "Start update" (con permiso del dueño). Sin .msi, el actualizador de Windows
+  no ofrece nada (sigue en 3.0.0, sin error).
 
 ## Versión 3.0.0: publicada en GitHub (2026-11-22), con el .msi
 GitHub Release v3.0.0 (latest) con `Selah-3.0.0.dmg`, `SelahRemoto.apk` (30000, firma 7B:EE…), `Selah-3.0.0.msi` y
