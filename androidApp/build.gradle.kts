@@ -48,7 +48,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Reducir y ofuscar el código (R8): Google Play lo exige desde 2027. Si algo se rompe en la versión
+            // publicada, las reglas van en proguard-rules.pro (el mapping.txt se sube a Play para leer los errores).
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("selah") ?: signingConfigs.getByName("debug")
         }
     }
