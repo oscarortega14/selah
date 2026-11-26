@@ -127,7 +127,7 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   `proguard-rules.pro`, Play lo exige desde feb 2027) enviada a revisión en Google Play. GitHub Release v3.0.1 (latest)
   publicada con `Selah-3.0.1.dmg` y `SelahRemoto.apk` (30001, firma 7B:EE…, probado: el actualizador ofuscado ve y
   descarga la versión nueva). Luego (2026-11-25) el PC con Windows subió `Selah-3.0.1.msi` + `.msi.sig` al Release (FIRMA VÁLIDA verificada
-  desde la Mac con la clave pública de `Updater.kt`) y el MSIX 3.0.1 se envió a Microsoft Store. 3.0.1 completa en todas partes.
+  desde la Mac con la clave pública de `Updater.kt`) y el MSIX 3.0.1 se envió a Microsoft Store. 3.0.1 completa en todas partes; aprobada en App Store, Google Play y Microsoft Store el 2026-11-25.
 
 ## Versión 3.0.0: publicada en GitHub (2026-11-22), con el .msi
 GitHub Release v3.0.0 (latest) con `Selah-3.0.0.dmg`, `SelahRemoto.apk` (30000, firma 7B:EE…), `Selah-3.0.0.msi` y
