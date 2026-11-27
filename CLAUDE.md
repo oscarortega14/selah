@@ -137,6 +137,11 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
   tamaño tableta y celular como operador (semana → culto → mirar sin proyectar → "Proyectar esta") y como músico (seguir,
   mirar otra con la Biblia en pantalla, cultos de la semana en el selector, volver, corte y reconexión); APK final con R8.
   `PhoneE2ETool` acepta `SELAH_E2E_ROLE=OPERATOR|MUSICIAN`. Falta: iPad real, Windows.
+- Publicado (2026-11-26): GitHub Release v3.1.0 (latest) con `Selah-3.1.0.dmg` y `SelahRemoto.apk` (30100, firma 7B:EE…,
+  probado con R8 en el emulador). Listos en `~/Desktop/Selah 3.1.0/` para que el dueño los suba: AAB 30100 (Google Play),
+  `SelahRemoto-3.1.0-30100.ipa` (archivado y exportado con `method=app-store-connect`, `destination=export`; App Store
+  Connect con Transporter) y `Que hay de nuevo.txt`. Falta: `.msi` + `.msi.sig` al Release y MSIX a Microsoft Store desde
+  el PC con Windows.
 
 ## Versión 3.0.1 (2026-11-24): iPad y tablets, desplazamiento automático en el PC
 - 3.0.0 aprobada en Microsoft Store, App Store y Google Play (2026-11-23).
