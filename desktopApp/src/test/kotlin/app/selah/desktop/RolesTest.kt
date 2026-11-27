@@ -156,6 +156,8 @@ class RolesTest {
                 say(ClientMessage.SongView("no-existe"))
                 assertTrue((until { it is ServerMessage.SongView } as ServerMessage.SongView).slides.isEmpty())
                 assertTrue(app.selah.shared.FEATURE_SONG_VIEW in lib.features)
+                // Esta app no dijo que entiende la semana: no le llega
+                assertNull(withTimeoutOrNull(800) { until { it is ServerMessage.Week } })
 
                 // Director: click sí, la letra no
                 team.update(TeamStore.hash(juan)) { it.copy(role = Role.DIRECTOR) }
@@ -188,6 +190,21 @@ class RolesTest {
                 say(ClientMessage.Login("4321"))
                 until { it is ServerMessage.Auth && it.ok }
                 assertNull(refused(ClientMessage.Next))
+            }
+        }
+        client.close()
+    }
+
+    @Test
+    fun theWeekGoesToNewAppsOnly() = runBlocking {
+        commands.services!!.update { it.copy(services = listOf(app.selah.shared.WorshipService("Diario", java.time.LocalDate.now().dayOfWeek.value, "9:00"))) }
+        val client = HttpClient(CIO) { install(WebSockets) }
+        withTimeout(10_000) {
+            client.webSocket(host = "127.0.0.1", port = port, path = WS_PATH) {
+                say(ClientMessage.Hello(listOf(app.selah.shared.FEATURE_WEEK), deviceId = juan, deviceName = "Juan"))
+                val week = until { it is ServerMessage.Week } as ServerMessage.Week
+                assertEquals("Diario", week.services.first().name)
+                assertTrue(week.services.first().today)
             }
         }
         client.close()

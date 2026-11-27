@@ -94,6 +94,16 @@ class ServicesStoreTest {
         // Se recuerda en cultos.json
         assertEquals("Domingo 29 nov", ServicesStore(File(dir, "cultos.json")).config.value.services[0].planned["2026-11-29"])
 
+        // La semana para la pestaña Lista: el domingo con su lista planeada y sus canciones; el miércoles sin planear
+        val weekList = weekPlan(services.config.value, thursday, commands.plan.saved.value) { commands.plan.savedItems(it) }
+        assertEquals(listOf("Domingo", "Miércoles"), weekList.map { it.name })
+        assertEquals("domingo 29 nov", weekList[0].day)
+        assertTrue(weekList[0].planned)
+        assertEquals(listOf("B", "A"), weekList[0].items.map { it.ref })
+        assertNull(weekList[1].list)
+        assertTrue(weekList.none { it.today })
+        assertTrue(weekPlan(services.config.value, LocalDate.of(2026, 11, 29), commands.plan.saved.value) { null }[0].today)
+
         // Al volver a abrir el planeado, cada paso recibe lo suyo (canción con canción, lectura con lectura)
         val items = commands.plan.savedItems("Domingo 29 nov")!!
         assertEquals(listOf("B", "A", null), matchStepsToItems(domingo.steps, items).map { it?.ref })

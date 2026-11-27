@@ -113,4 +113,15 @@ class ServicesTest {
         val old = ProtocolJson.decodeFromString(ServicesConfig.serializer(), """{"services":[{"name":"D","day":7}]}""")
         assertEquals(emptyMap(), old.services[0].planned)
     }
+
+    @Test
+    fun theWeekTravelsToThePhonesAndOldOnesIgnoreIt() {
+        val week = ServerMessage.Week(listOf(WeekService("Domingo", "2026-11-29", "domingo 29 nov", "9:00", "Domingo 29 nov", planned = true, today = false,
+            items = listOf(PlanItem(PlanKind.SONG, "A", "A"), PlanItem(PlanKind.BIBLE, "Juan 3:16", "Juan 3:16")))))
+        assertEquals(week, decodeServerMessage(week.encode()))
+        // Cada elemento sabe cómo ponerse en pantalla
+        assertEquals(ClientMessage.SelectSong("A"), week.services[0].items[0].showMessage())
+        assertEquals(ClientMessage.ShowBible("Juan 3:16"), week.services[0].items[1].showMessage())
+        assertEquals("Lectura", week.services[0].items[1].kindLabel)
+    }
 }

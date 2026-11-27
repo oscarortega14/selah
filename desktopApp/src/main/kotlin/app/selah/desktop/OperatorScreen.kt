@@ -68,6 +68,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import app.selah.shared.ServicePlanState
+import app.selah.shared.kindLabel
+import app.selah.shared.showMessage
 import app.selah.shared.PlanKind
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.PaddingValues
@@ -276,7 +278,7 @@ private fun LeftPanel(
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TabRow(selectedTabIndex = tab) {
-            val titles = listOf("Canciones", "Biblia", "Anuncios", "Lista" + if (plan.items.isNotEmpty()) " (${plan.items.size})" else "")
+            val titles = listOf("Canciones", "Biblia", "Anuncios", "Lista")
             titles.forEachIndexed { i, t ->
                 // Contenido propio (sin el margen grande de Tab) para que quepan las 4 pestañas.
                 Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.hand()) {
@@ -617,66 +619,159 @@ private fun PlanPanel(
 ) {
     var saving by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(false) }
+    var showOrder by remember { mutableStateOf(false) }
+    var openCard by remember { mutableStateOf<String?>(null) }
+    var choosing by remember { mutableStateOf<Pair<Int, java.time.LocalDate>?>(null) }
     val worship = LocalWorship.current
-    var preparing by remember { mutableStateOf<app.selah.shared.WorshipService?>(null) }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // El culto de hoy: abrir la lista que le toca o prepararla desde la plantilla.
-        if (worship != null) TodayServiceBanner(worship, onOpenList = { send(ClientMessage.PlanOpen(it)) }, onPrepare = { preparing = it })
-        preparing?.let { svc -> if (worship != null) PrepareServiceDialog(svc, worship, send) { preparing = null } }
-        var planningWeek by remember { mutableStateOf(false) }
-        if (worship != null && worship.config.services.isNotEmpty()) {
-            OutlinedButton({ planningWeek = true }, Modifier.fillMaxWidth().hand(), contentPadding = PaddingValues(6.dp)) { Text("Planificar la semana…") }
+    // La semana: cada culto de los próximos 7 días con su lista (la planeada o la de la rotación).
+    val today = java.time.LocalDate.now()
+    val upcoming = remember(worship, today) { worship?.let { upcomingServices(it.config, today) }.orEmpty() }
+    val week = remember(worship, today) { worship?.let { weekPlan(it.config, today, it.savedLists, it.savedItems) }.orEmpty() }
+    if (saving) SavePlanDialog(plan.name.ifEmpty { suggestedListName() }, savedLists, { saving = false }) { name -> saving = false; send(ClientMessage.PlanSave(name)) }
+    if (opening) OpenPlanDialog(savedLists, plan.items.isNotEmpty(), onDeleteSaved, { opening = false }) { name -> opening = false; send(ClientMessage.PlanOpen(name)) }
+    choosing?.let { (i, date) -> if (worship != null) ChooseSongsDialog(worship, i, date, send) { choosing = null } }
+
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // El culto abierto: compacto, con "Siguiente"; el orden completo solo si se pide.
+        if (plan.items.isNotEmpty()) item {
+            NowCard(plan, showOrder, onToggleOrder = { showOrder = !showOrder }, onSave = { saving = true }, send = send)
         }
-        if (planningWeek && worship != null) WeekPlanDialog(worship, send) { planningWeek = false }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Orden del culto", style = MaterialTheme.typography.titleSmall)
-                if (plan.name.isNotEmpty()) {
-                    Text(plan.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (plan.items.isNotEmpty() && showOrder) itemsIndexed(plan.items) { i, item ->
+            val selected = i == plan.current
+            Card(
+                Modifier.fillMaxWidth().handClickable { send(ClientMessage.PlanGo(i)) },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                        Text("${i + 1}. ${item.title}", maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                        Text(item.kindLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton({ send(ClientMessage.PlanMove(i, i - 1)) }, enabled = i > 0, contentPadding = PaddingValues(4.dp)) { Text("▲") }
+                    TextButton({ send(ClientMessage.PlanMove(i, i + 1)) }, enabled = i < plan.items.lastIndex, contentPadding = PaddingValues(4.dp)) { Text("▼") }
+                    TextButton({ send(ClientMessage.PlanRemove(i)) }, contentPadding = PaddingValues(4.dp)) { Text("✕") }
                 }
             }
-            if (plan.items.isNotEmpty()) TextButton({ send(ClientMessage.PlanClear) }) { Text("Vaciar") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedButton({ saving = true }, Modifier.weight(1f), enabled = plan.items.isNotEmpty(), contentPadding = PaddingValues(6.dp)) { Text("Guardar…") }
-            OutlinedButton({ opening = true }, Modifier.weight(1f), enabled = savedLists.isNotEmpty(), contentPadding = PaddingValues(6.dp)) {
-                Text("Abrir… (${savedLists.size})")
+
+        // Esta semana
+        item {
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Esta semana", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                if (worship != null) OutlinedButton(worship.openServices, Modifier.hand(), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) { Text("Plantillas…") }
             }
         }
-        if (saving) SavePlanDialog(plan.name.ifEmpty { suggestedListName() }, savedLists, { saving = false }) { name -> saving = false; send(ClientMessage.PlanSave(name)) }
-        if (opening) OpenPlanDialog(savedLists, plan.items.isNotEmpty(), onDeleteSaved, { opening = false }) { name -> opening = false; send(ClientMessage.PlanOpen(name)) }
-        Button({ send(ClientMessage.PlanNext) }, Modifier.fillMaxWidth(), enabled = plan.current < plan.items.lastIndex) {
-            Text("Siguiente elemento ▶")
-        }
-        if (plan.items.isEmpty()) {
+        if (week.isEmpty()) item {
             Text(
-                "Vacía. Usa \"Planificar la semana…\" para elegir las canciones de cada culto con su plantilla, " +
-                    "o agrega una por una con \"+ Lista\" en las pestañas Canciones, Biblia o Anuncios.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (worship?.config?.services.isNullOrEmpty()) "Todavía no hay cultos. Toca \"Plantillas…\" y crea cada culto con su día, hora y orden (alabanzas, adoraciones, predicación…)."
+                else "No hay cultos en los próximos 7 días.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexed(plan.items) { i, item ->
-                val selected = i == plan.current
-                Card(
-                    Modifier.fillMaxWidth().handClickable { send(ClientMessage.PlanGo(i)) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                ) {
-                    Row(Modifier.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
-                            Text("${i + 1}. ${item.title}", maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                            Text(
-                                when (item.kind) { PlanKind.BIBLE -> "Lectura"; PlanKind.MEDIA -> "Anuncio"; PlanKind.SERMON -> "Predicación"; PlanKind.PRESENTATION -> "Presentación"; else -> "Canción" },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        TextButton({ send(ClientMessage.PlanMove(i, i - 1)) }, enabled = i > 0, contentPadding = PaddingValues(4.dp)) { Text("▲") }
-                        TextButton({ send(ClientMessage.PlanMove(i, i + 1)) }, enabled = i < plan.items.lastIndex, contentPadding = PaddingValues(4.dp)) { Text("▼") }
-                        TextButton({ send(ClientMessage.PlanRemove(i)) }, contentPadding = PaddingValues(4.dp)) { Text("✕") }
+        week.forEachIndexed { k, w ->
+            val key = w.date + "|" + w.name
+            val index = upcoming.getOrNull(k)?.first
+            val hasSteps = index != null && worship?.config?.services?.getOrNull(index)?.steps?.isNotEmpty() == true
+            item(key = key) {
+                WeekCard(
+                    w, expanded = openCard == key, isOpen = w.list != null && w.list.equals(plan.name, ignoreCase = true),
+                    onToggle = { openCard = if (openCard == key) null else key },
+                    onChoose = if (hasSteps) ({ choosing = index!! to java.time.LocalDate.parse(w.date) }) else null,
+                    send = send,
+                )
+            }
+        }
+
+        // Otras listas guardadas (las de antes, o armadas a mano)
+        item {
+            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton({ opening = true }, Modifier.weight(1f), enabled = savedLists.isNotEmpty(), contentPadding = PaddingValues(6.dp)) {
+                    Text("Otras listas… (${savedLists.size})")
+                }
+                if (plan.items.isEmpty()) OutlinedButton({ saving = true }, Modifier.weight(1f), enabled = false, contentPadding = PaddingValues(6.dp)) { Text("Guardar…") }
+            }
+        }
+        if (plan.items.isEmpty()) item {
+            Text(
+                "Para armar una lista a mano, toca \"+ Lista\" en las pestañas Canciones, Biblia o Anuncios.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** El culto abierto: lo que está y lo que sigue, "Siguiente ▶" y el orden completo plegado. */
+@Composable
+private fun NowCard(plan: ServicePlanState, showOrder: Boolean, onToggleOrder: () -> Unit, onSave: () -> Unit, send: (ClientMessage) -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("En curso", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(plan.name.ifEmpty { "Lista sin guardar" }, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                TextButton({ send(ClientMessage.PlanClear) }, Modifier.hand(), contentPadding = PaddingValues(4.dp)) { Text("Cerrar") }
+            }
+            plan.items.getOrNull(plan.current)?.let { Text("Ahora: ${plan.current + 1}. ${it.title}", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            plan.items.getOrNull(plan.current + 1)?.let {
+                Text("Sigue: ${plan.current + 2}. ${it.title}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button({ send(ClientMessage.PlanNext) }, Modifier.fillMaxWidth().hand(), enabled = plan.current < plan.items.lastIndex) {
+                Text(if (plan.current < 0) "Empezar ▶" else "Siguiente ▶")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onToggleOrder, Modifier.hand(), contentPadding = PaddingValues(4.dp)) { Text(if (showOrder) "Ocultar el orden" else "Ver el orden (${plan.items.size})") }
+                TextButton(onSave, Modifier.hand(), contentPadding = PaddingValues(4.dp)) { Text("Guardar…") }
+            }
+        }
+    }
+}
+
+/** Un culto de la semana; al abrirlo, su orden (cada canción se puede proyectar) y abrirlo entero. */
+@Composable
+private fun WeekCard(
+    w: app.selah.shared.WeekService,
+    expanded: Boolean,
+    isOpen: Boolean,
+    onToggle: () -> Unit,
+    onChoose: (() -> Unit)?,
+    send: (ClientMessage) -> Unit,
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = if (w.today) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().handClickable(onClick = onToggle).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text((if (w.today) "Hoy · " else "") + w.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(w.day + if (w.time.isBlank()) "" else " · ${w.time}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        when {
+                            w.list == null -> "Sin planear"
+                            isOpen -> "Abierto · ${w.items.size} elementos"
+                            else -> "${w.items.count { it.kind == app.selah.shared.PlanKind.SONG }} canciones" + if (w.planned) "" else " · rotación: «${w.list}»"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (w.list == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(if (expanded) "▴" else "▾")
+            }
+            if (expanded) Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                w.items.forEachIndexed { i, item ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${i + 1}. ${item.title}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        TextButton({ send(item.showMessage()) }, Modifier.hand(), contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Proyectar") }
+                    }
+                }
+                if (w.list == null) Text("Todavía no tiene canciones.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (w.list != null && !isOpen) Button({ send(ClientMessage.PlanOpen(w.list!!)) }, Modifier.weight(1f).hand(), contentPadding = PaddingValues(6.dp)) { Text("Abrir este culto") }
+                    if (onChoose != null) OutlinedButton(onChoose, Modifier.weight(1f).hand(), contentPadding = PaddingValues(6.dp)) {
+                        Text(if (w.planned) "Cambiar canciones…" else "Elegir canciones…")
                     }
                 }
             }

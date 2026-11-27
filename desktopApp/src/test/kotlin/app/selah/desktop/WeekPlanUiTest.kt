@@ -13,6 +13,7 @@ import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import app.selah.shared.PlanKind
 import app.selah.shared.Theme
@@ -76,65 +77,75 @@ class WeekPlanUiTest {
                     ImageIO.write(img, "png", File(out, if (i == 0) "$name.png" else "$name-$i.png"))
                 }
             }
-            fun SemanticsNodeInteraction.tap() = performClick().also { waitForIdle() }
+            // Si está fuera de la vista (lista larga), primero se desplaza hasta ahí, como haría una persona.
+            fun SemanticsNodeInteraction.tap() = also { runCatching { performScrollTo() } }.performClick().also { waitForIdle() }
 
-            // 1) La pestaña Lista con el botón nuevo
-            onNode(androidx.compose.ui.test.hasText("Lista", substring = true) and
+            // 1) La pestaña Lista: "En curso" compacto y "Esta semana" con un culto por tarjeta
+            onNode(androidx.compose.ui.test.hasText("Lista") and
                 androidx.compose.ui.test.SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Tab)).tap()
             shot("1-lista")
-            onNodeWithText("Planificar la semana…").tap()
-            shot("2-semana")
-            assertEquals(2, onAllNodesWithText("Sin planear").fetchSemanticsNodes().size)
+            onNodeWithText("Esta semana").assertExists()
+            onNodeWithText("En curso").assertExists()
+            // El orden completo no se ve hasta pedirlo
+            assertEquals(0, onAllNodesWithText(firstSongs[0].title).fetchSemanticsNodes().size)
 
-            // 2) El primer culto que viene: elegir canciones con la plantilla
-            onAllNodesWithText("Elegir canciones…")[0].tap()
-            shot("3-plantilla")
-            // Cambiar la primera canción por otra con el select
-            val firstPick = onAllNodesWithText("▾", substring = true)[0]
-            firstPick.tap()
-            shot("4-select")
             val week = upcomingServices(services.config.value, LocalDate.now())
             val (svcIndex, date) = week.first()
             val svc = services.config.value.services[svcIndex]
+
+            // 2) Entrar al primer culto y elegir sus canciones con la plantilla
+            onNodeWithText(svc.name).tap()
+            shot("2-culto-abierto")
+            onNodeWithText("Elegir canciones…").tap()
+            shot("3-plantilla")
+            onAllNodesWithText("▾", substring = true)[0].tap()
+            shot("4-select")
             val option = library.catalog.value.songs.filter { s -> svc.steps.first().tag.let { t -> s.tags.isEmpty() || s.tags.any { it.equals(t, true) } } }
                 .map { it.title }.first { t -> onAllNodesWithText(t, substring = true).fetchSemanticsNodes().isNotEmpty() }
-            onAllNodesWithText(option, substring = true).fetchSemanticsNodes().size.let { assertTrue(it >= 1) }
             onAllNodesWithText(option, substring = true).let { it[it.fetchSemanticsNodes().size - 1] }.tap()
-            shot("5-elegida")
             onNodeWithText("Guardar").tap()
-            shot("6-guardada")
+            shot("5-guardada")
 
-            // Quedó guardada con nombre, enlazada a ese día, y la lista de ahora no cambió
             val listName = plannedListName(svc, date)
-            onNodeWithText("✓ Lista: «$listName»").assertExists()
             val items = assertNotNull(commands.plan.savedItems(listName))
-            assertEquals(svc.steps.count { it.kind == app.selah.shared.StepKind.SONG }, items.count { it.kind == PlanKind.SONG })
+            val songCount = svc.steps.count { it.kind == app.selah.shared.StepKind.SONG }
+            assertEquals(songCount, items.count { it.kind == PlanKind.SONG })
             assertTrue(items.first().title.startsWith(option.substringBefore(" ·")))
             assertEquals(listName, services.config.value.services[svcIndex].planned[date.toString()])
             assertEquals(planBefore.items, commands.plan.state.value.items)
-            // Sin canciones repetidas dentro del culto
             assertEquals(items.size, items.map { it.ref }.distinct().size)
+            // La tarjeta ya muestra sus canciones y el botón para cambiarlas
+            onNodeWithText("$songCount canciones").assertExists()
+            onNodeWithText("Cambiar canciones…").assertExists()
+            onNodeWithText("1. ${items.first().title}").assertExists()
 
             // 3) El segundo culto no repite las del primero
             if (week.size > 1) {
-                onAllNodesWithText("Elegir canciones…")[0].tap()
-                onNodeWithText("Guardar").tap()
                 val (j, d2) = week[1]
+                onNodeWithText(svc.name).tap() // cerrar el primero
+                onNodeWithText(services.config.value.services[j].name).tap()
+                onNodeWithText("Elegir canciones…").tap()
+                onNodeWithText("Guardar").tap()
                 val second = assertNotNull(commands.plan.savedItems(plannedListName(services.config.value.services[j], d2)))
                 assertTrue(second.filter { it.kind == PlanKind.SONG }.none { s -> items.any { it.kind == PlanKind.SONG && it.ref == s.ref } }, "El segundo culto repitió canciones del primero")
-                shot("7-dos-cultos")
+                shot("6-dos-cultos")
+                onNodeWithText(svc.name).tap()
             }
 
-            // 4) "Cambiar…" abre lo que ya tenía
-            onAllNodesWithText("Cambiar…")[0].tap()
-            shot("8-cambiar")
-            onNodeWithText(option, substring = true).assertExists()
-            onNodeWithText("Cancelar").tap()
+            // 4) "Proyectar" una canción del culto sin abrirlo
+            onAllNodesWithText("Proyectar")[1].tap()
+            assertEquals(items[1].title, commands.presenter.state.value.title)
+            assertEquals(planBefore.items, commands.plan.state.value.items)
 
-            // 5) "Abrir ahora" la pone como lista del culto
-            onAllNodesWithText("Abrir ahora")[0].tap()
-            shot("9-abierta")
+            // 5) "Abrir este culto": queda En curso, compacto, con "Empezar"
+            onNodeWithText("Abrir este culto").tap()
+            shot("7-en-curso")
             assertEquals(listName, commands.plan.state.value.name)
+            onNodeWithText(listName).assertExists()
+            onNodeWithText("Abierto · ${items.size} elementos").assertExists()
+            onNodeWithText("Ver el orden (${items.size})").tap()
+            shot("8-orden")
+            onNodeWithText("Ocultar el orden").assertExists()
         }
     }
 }

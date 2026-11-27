@@ -100,6 +100,14 @@ fun musicianChoices(plan: ServicePlanState, songs: List<SongSummary>, query: Str
     return inPlan.filter { it in found } to found.filter { it.id !in planIds }
 }
 
+/** Las canciones de cada culto de la semana que coinciden con [query] (los cultos sin canciones no salen). */
+fun weekChoices(week: List<app.selah.shared.WeekService>, songs: List<SongSummary>, query: String): List<Pair<app.selah.shared.WeekService, List<SongSummary>>> {
+    val byId = songs.associateBy { it.id }
+    return week.map { w ->
+        w to w.items.filter { it.kind == PlanKind.SONG }.map { byId[it.ref] ?: SongSummary(it.ref, it.title) }.distinctBy { it.id }.search(query)
+    }.filter { it.second.isNotEmpty() }
+}
+
 /**
  * Pantalla del músico: la canción en pantalla con su partitura (la de su instrumento), los acordes en el tono
  * que quiera, o la letra; y el click o la secuencia. Sigue sola al operador, pero puede mirar otra canción por su
@@ -130,6 +138,8 @@ fun MusicianView(
     onView: ((String) -> Unit)? = null,
     /** La canción que mira por su cuenta (null = sigue al operador). Vive afuera para no perderse al reconectar. */
     browsingState: androidx.compose.runtime.MutableState<String?> = rememberSaveable { mutableStateOf(null) },
+    /** Los cultos de la semana (para elegir entre sus canciones). */
+    week: List<app.selah.shared.WeekService> = emptyList(),
 ) {
     val live = state
     var browsing by browsingState
@@ -140,8 +150,60 @@ fun MusicianView(
     LaunchedEffect(browsing, viewed == null) { browsing?.let { if (viewed?.id != it) onView?.invoke(it) } }
     @Suppress("NAME_SHADOWING")
     val state = musicianShown(live, browsing, viewed) ?: PresentationState(title = songs.find { it.id == browsing }?.title.orEmpty())
-    val loading = browsing != null && viewed?.id != browsing
     val liveSongId = live.songId?.takeIf { !live.isBible && !live.sermon && live.media == null && live.presentation == null }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // iPad o tablet: el título en una línea y todos los controles en una sola fila, para que quepa más partitura.
+    val wide = maxWidth >= WIDE
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || live.click != null)) {
+            ClickPanel(
+                live.click, { client.serverOffset }, client::send, { client.clockRtt },
+                clickAllowed = FEATURE_CLICK in features,
+                sequenceAvailable = FEATURE_SEQUENCES in features && liveSongId != null && liveSongId in sequences,
+                canControl = canControl, onNeedPin = onNeedPin, controls = showControls,
+            )
+        }
+        // En iPad, siguiendo al operador, el botón va en la fila del título (más espacio para la partitura).
+        val pickInTitle = wide && onView != null && browsing == null && !picking
+        if (onView != null && !pickInTitle) BrowseBar(browsing != null, picking, live.title,
+            onPick = { picking = true }, onCancel = { picking = false }, onLive = { browsing = null; picking = false })
+        if (picking && onView != null) {
+            SongPicker(plan, songs, liveSongId, week) { id ->
+                picking = false
+                browsing = if (id == liveSongId) null else id // el pedido al PC lo hace el LaunchedEffect de arriba
+            }
+        } else {
+            MusicSheet(
+                client, state, features, scores, instrument, onInstrument, prefs, suggestedInstrument, wide,
+                loading = browsing != null && viewed?.id != browsing,
+                missing = browsing != null && viewed?.id == browsing && state.slides.isEmpty(),
+                titleAction = if (pickInTitle) ({ OutlinedButton({ picking = true }) { Text("Ver otra canción") } }) else null,
+            )
+        }
+    }
+    }
+}
+
+/**
+ * Una canción para el músico: título, instrumento, Partitura / Acordes / Letra, tamaño y el contenido.
+ * [state] es lo que se ve (en vivo o la que se eligió mirar); [titleAction] va a la derecha del título en iPad.
+ */
+@Composable
+fun MusicSheet(
+    client: RemoteClient,
+    state: PresentationState,
+    features: List<String>,
+    scores: List<ScoreRef>,
+    instrument: String?,
+    onInstrument: (String?) -> Unit,
+    prefs: KeyValueStore?,
+    suggestedInstrument: String?,
+    wide: Boolean,
+    loading: Boolean = false,
+    missing: Boolean = false,
+    titleAction: (@Composable () -> Unit)? = null,
+) {
     val songId = state.songId?.takeIf { !state.isBible && !state.sermon && state.media == null && state.presentation == null }
     val score = songId?.let { scoreFor(scores, it, instrument) }
     val hasChords = state.slides.any { it.chords.isNotEmpty() }
@@ -167,35 +229,14 @@ fun MusicianView(
     val sizeChips: @Composable () -> Unit = { ZOOMS.forEach { (z, label) -> FilterChip(zoom == z, { zoom = z }, { Text(label) }) } }
     val autoChip: @Composable () -> Unit = { FilterChip(autoPages, toggleAuto, { Text("Pasar páginas solo") }) }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-    // iPad o tablet: el título en una línea y todos los controles en una sola fila, para que quepa más partitura.
-    val wide = maxWidth >= WIDE
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || live.click != null)) {
-            ClickPanel(
-                live.click, { client.serverOffset }, client::send, { client.clockRtt },
-                clickAllowed = FEATURE_CLICK in features,
-                sequenceAvailable = FEATURE_SEQUENCES in features && liveSongId != null && liveSongId in sequences,
-                canControl = canControl, onNeedPin = onNeedPin, controls = showControls,
-            )
-        }
-        // En iPad, siguiendo al operador, el botón va en la fila del título (más espacio para la partitura).
-        val pickInTitle = wide && onView != null && browsing == null && !picking
-        if (onView != null && !pickInTitle) BrowseBar(browsing != null, picking, live.title,
-            onPick = { picking = true }, onCancel = { picking = false }, onLive = { browsing = null; picking = false })
-        if (picking && onView != null) {
-            SongPicker(plan, songs, liveSongId) { id ->
-                picking = false
-                browsing = if (id == liveSongId) null else id // el pedido al PC lo hace el LaunchedEffect de arriba
-            }
-        } else {
         if (wide) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(state.title.ifEmpty { "Esperando la canción…" }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge, maxLines = 1)
                     state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1) }
                 }
-                if (pickInTitle) OutlinedButton({ picking = true }) { Text("Ver otra canción") }
+                titleAction?.invoke()
             }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -207,15 +248,16 @@ fun MusicianView(
                     first = false
                     chips()
                 }
-                if (showInstruments) group(instrumentChips)
+                // Partitura / Acordes / Letra primero: los instrumentos son muchos y los taparían.
                 if (views.size > 1) group(viewChips)
                 if (view == MusicView.SCORE) { group(sizeChips); group(autoChip) }
+                if (showInstruments) group(instrumentChips)
             }
         } else {
-            Text(
-                state.title.ifEmpty { "Esperando la canción…" },
-                style = MaterialTheme.typography.titleLarge, maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(state.title.ifEmpty { "Esperando la canción…" }, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                titleAction?.invoke()
+            }
             state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
             if (showInstruments) {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -236,8 +278,7 @@ fun MusicianView(
             loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(Modifier.width(24.dp)); Text("Cargando la canción…")
             }
-            browsing != null && state.slides.isEmpty() ->
-                Text("No encontré esa canción en el computador (¿la borraron o le cambiaron el nombre?).", color = MaterialTheme.colorScheme.error)
+            missing -> Text("No encontré esa canción en el computador (¿la borraron o le cambiaron el nombre?).", color = MaterialTheme.colorScheme.error)
             else -> when (view) {
                 MusicView.SCORE -> ScoreView(
                     client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null,
@@ -247,8 +288,6 @@ fun MusicianView(
                 MusicView.LYRICS -> LyricsView(state)
             }
         }
-        }
-    }
     }
 }
 
@@ -281,13 +320,20 @@ private fun BrowseBar(browsing: Boolean, picking: Boolean, liveTitle: String, on
 
 /** Elegir qué canción mirar: las de la lista del culto primero, y todas con un buscador. */
 @Composable
-private fun SongPicker(plan: ServicePlanState, songs: List<SongSummary>, liveSongId: String?, onChoose: (String) -> Unit) {
+private fun SongPicker(plan: ServicePlanState, songs: List<SongSummary>, liveSongId: String?, week: List<app.selah.shared.WeekService>, onChoose: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val (inPlan, others) = musicianChoices(plan, songs, query)
+    // El culto que ya está en curso no se repite abajo.
+    val weekSongs = weekChoices(week.filterNot { inPlan.isNotEmpty() && it.list != null && it.list.equals(plan.name, ignoreCase = true) }, songs, query)
     OutlinedTextField(query, { query = it }, label = { Text("Buscar por título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (inPlan.isNotEmpty()) item { Text("Lista del culto", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+        if (inPlan.isNotEmpty()) item { Text("En curso" + if (plan.name.isNotEmpty()) " · ${plan.name}" else "", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
         items(inPlan, key = { "plan-" + it.id }) { SongChoice(it, it.id == liveSongId, onChoose) }
+        // Los cultos de la semana, cada uno con sus canciones (para ensayar lo que viene).
+        for ((w, list) in weekSongs) {
+            item(key = "w-" + w.date + w.name) { Text("${w.name} · ${w.day}", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+            items(list, key = { "w-" + w.date + w.name + "-" + it.id }) { SongChoice(it, it.id == liveSongId, onChoose) }
+        }
         if (others.isNotEmpty()) item { Text("Todas las canciones", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
         items(others, key = { it.id }) { SongChoice(it, it.id == liveSongId, onChoose) }
         if (inPlan.isEmpty() && others.isEmpty()) item { Text("No hay canciones con ese nombre.", color = MaterialTheme.colorScheme.onSurfaceVariant) }

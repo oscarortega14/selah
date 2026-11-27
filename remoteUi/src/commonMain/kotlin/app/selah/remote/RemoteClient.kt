@@ -132,6 +132,10 @@ class RemoteClient(private val scope: CoroutineScope) {
     private val _bibleBooks = MutableStateFlow<List<BibleBookInfo>>(emptyList())
     val bibleBooks: StateFlow<List<BibleBookInfo>> = _bibleBooks.asStateFlow()
 
+    /** Los cultos de la semana con sus canciones (PC con la pestaña Lista nueva; vacío si es viejo). */
+    private val _week = MutableStateFlow<List<app.selah.shared.WeekService>>(emptyList())
+    val week: StateFlow<List<app.selah.shared.WeekService>> = _week.asStateFlow()
+
     /** Última canción pedida con [ClientMessage.SongView] (el músico mirando otra canción). */
     private val _songView = MutableStateFlow<ServerMessage.SongView?>(null)
     val songView: StateFlow<ServerMessage.SongView?> = _songView.asStateFlow()
@@ -210,7 +214,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
         _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
         _scores.value = emptyList(); _sequences.value = emptyList()
-        _plan.value = ServicePlanState(); _songView.value = null; _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
+        _plan.value = ServicePlanState(); _songView.value = null; _week.value = emptyList(); _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
         _auth.value = null
         clock.reset()
     }
@@ -350,7 +354,7 @@ class RemoteClient(private val scope: CoroutineScope) {
     var deviceId: String? = null
     var deviceName: String? = null
 
-    private fun hello() = ClientMessage.Hello(listOf(app.selah.shared.FEATURE_KEEP_SLIDES, app.selah.shared.FEATURE_PRESENTATIONS), deviceId, deviceName)
+    private fun hello() = ClientMessage.Hello(listOf(app.selah.shared.FEATURE_KEEP_SLIDES, app.selah.shared.FEATURE_PRESENTATIONS, app.selah.shared.FEATURE_WEEK), deviceId, deviceName)
 
     /** Cambió el nombre: presentarse otra vez para que el PC lo muestre. */
     fun rename(name: String) { deviceName = name; send(hello()) }
@@ -380,6 +384,7 @@ class RemoteClient(private val scope: CoroutineScope) {
             }
             is ServerMessage.BibleChapter -> _bibleChapter.value = m
             is ServerMessage.SongView -> _songView.value = m
+            is ServerMessage.Week -> _week.value = m.services
             is ServerMessage.State -> {
                 clock.roughFromState(m.serverNow, nowMillis())
                 _state.value = app.selah.shared.mergeState(_state.value, m)

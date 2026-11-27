@@ -241,6 +241,37 @@ data class ServicePlanState(
     val name: String = "",
 )
 
+/**
+ * Un culto de los próximos 7 días con lo que se va a cantar: "Domingo" el "2026-11-29" ([day] "domingo 29 nov").
+ * [list]: la lista de ese día (la planeada o la que toca en la rotación); [planned] si se planeó para esa fecha.
+ */
+@Serializable
+data class WeekService(
+    val name: String,
+    val date: String,
+    val day: String,
+    val time: String = "",
+    val list: String? = null,
+    val planned: Boolean = false,
+    val today: Boolean = false,
+    val items: List<PlanItem> = emptyList(),
+)
+
+/** La orden que pone en pantalla un elemento de una lista. */
+fun PlanItem.showMessage(): ClientMessage = when (kind) {
+    PlanKind.SONG -> ClientMessage.SelectSong(ref)
+    PlanKind.BIBLE -> ClientMessage.ShowBible(ref)
+    PlanKind.MEDIA -> ClientMessage.ShowMedia(ref)
+    PlanKind.SERMON -> ClientMessage.ShowSermon(ref)
+    PlanKind.PRESENTATION -> ClientMessage.ShowPresentation(ref)
+}
+
+/** "Canción", "Lectura", "Anuncio", "Predicación", "Presentación". */
+val PlanItem.kindLabel: String get() = when (kind) {
+    PlanKind.BIBLE -> "Lectura"; PlanKind.MEDIA -> "Anuncio"; PlanKind.SERMON -> "Predicación"
+    PlanKind.PRESENTATION -> "Presentación"; PlanKind.SONG -> "Canción"
+}
+
 /** Mensajes que el escritorio envía a los remotos conectados. */
 @Serializable
 sealed interface ServerMessage {
@@ -301,6 +332,10 @@ sealed interface ServerMessage {
         val todayList: String? = null,
     ) : ServerMessage
 
+    /** Los cultos de la semana con sus canciones. Solo a quien dijo [FEATURE_WEEK] en Hello. */
+    @Serializable @SerialName("week")
+    data class Week(val services: List<WeekService>) : ServerMessage
+
     /** Respuesta a [ClientMessage.SongView]: la letra (con acordes) de esa canción; [slides] vacío = no existe. */
     @Serializable @SerialName("song_view")
     data class SongView(val id: String, val title: String = "", val slides: List<Slide> = emptyList()) : ServerMessage
@@ -352,6 +387,9 @@ const val FEATURE_CAROUSEL = "carousel"
 
 /** Capacidad del PC (Library.features): un celular puede ver cualquier canción sin proyectarla ([ClientMessage.SongView]). */
 const val FEATURE_SONG_VIEW = "songView"
+
+/** Capacidad del remoto (Hello.features): entiende [ServerMessage.Week] (los cultos de la semana). */
+const val FEATURE_WEEK = "week"
 
 /** Segundos por imagen que se proponen al iniciar un carrusel. Se aceptan de [CAROUSEL_MIN_SECONDS] a [CAROUSEL_MAX_SECONDS]. */
 const val CAROUSEL_SECONDS_DEFAULT = 8

@@ -58,6 +58,41 @@ fun todaySuggestion(cfg: app.selah.shared.ServicesConfig, saved: Collection<Stri
     return service.label to service.listFor(now.toLocalDate().toString(), saved)
 }
 
+private val DAY_MONTHS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+/** "domingo 29 nov" */
+fun dayText(date: java.time.LocalDate) =
+    "${app.selah.shared.DAY_NAMES[date.dayOfWeek.value - 1]} ${date.dayOfMonth} ${DAY_MONTHS[date.monthValue - 1]}"
+
+/** Los cultos de los próximos [days] días desde [from] (hoy incluido): índice del culto y fecha, en orden. */
+fun upcomingServices(cfg: app.selah.shared.ServicesConfig, from: java.time.LocalDate, days: Int = 7): List<Pair<Int, java.time.LocalDate>> =
+    (0 until days).flatMap { k ->
+        val d = from.plusDays(k.toLong())
+        cfg.services.withIndex().filter { it.value.day == d.dayOfWeek.value }
+            .sortedBy { app.selah.shared.parseMinutes(it.value.time) ?: 0 }
+            .map { it.index to d }
+    }
+
+/**
+ * La semana para la pestaña Lista (PC y celulares): cada culto de los próximos 7 días con su lista (la planeada
+ * para esa fecha o la de la rotación) y lo que tiene esa lista.
+ */
+fun weekPlan(
+    cfg: app.selah.shared.ServicesConfig,
+    today: java.time.LocalDate,
+    saved: Collection<String>,
+    items: (String) -> List<app.selah.shared.PlanItem>?,
+): List<app.selah.shared.WeekService> = upcomingServices(cfg, today).map { (i, d) ->
+    val s = cfg.services[i]
+    val list = s.listFor(d.toString(), saved)
+    app.selah.shared.WeekService(
+        s.name, d.toString(), dayText(d), s.time, list,
+        planned = list != null && s.planned[d.toString()]?.equals(list, ignoreCase = true) == true,
+        today = d == today,
+        items = list?.let(items).orEmpty(),
+    )
+}
+
 /** Las canciones con la fecha en que se cantaron por última vez ("2026-11-02"). */
 fun withLastSung(songs: List<app.selah.shared.SongSummary>, sung: Map<String, java.time.LocalDate>): List<app.selah.shared.SongSummary> =
     songs.map { s -> sung[s.id]?.let { s.copy(lastSung = it.toString()) } ?: s }

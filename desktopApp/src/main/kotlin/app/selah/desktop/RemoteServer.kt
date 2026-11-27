@@ -274,6 +274,7 @@ class RemoteServer(
                 val lean = java.util.concurrent.atomic.AtomicBoolean(false)
                 // ¿Entiende las presentaciones en la lista? (las apps anteriores fallarían con un tipo nuevo)
                 val knowsPresentations = kotlinx.coroutines.flow.MutableStateFlow(false)
+                val knowsWeek = kotlinx.coroutines.flow.MutableStateFlow(false)
                 var sentSlides: List<app.selah.shared.Slide>? = null
                 fun auth(message: String? = null): ServerMessage.Auth {
                     val r = currentRole()
@@ -313,6 +314,15 @@ class RemoteServer(
                         }
                             .distinctUntilChanged()
                             .collect { m -> send(Frame.Text(m.encode())) }
+                    }
+                    launch {
+                        // Los cultos de la semana (pestaña Lista): solo a las apps que los entienden.
+                        val today = kotlinx.coroutines.flow.flow { while (true) { emit(java.time.LocalDate.now()); kotlinx.coroutines.delay(60_000) } }
+                        kotlinx.coroutines.flow.combine(servicesConfig, commands.plan.saved, commands.plan.savedVersion, knowsWeek, today) { cfg, saved, _, knows, day ->
+                            if (!knows) null else ServerMessage.Week(weekPlan(cfg, day, saved) { commands.plan.savedItems(it) })
+                        }
+                            .distinctUntilChanged()
+                            .collect { m -> if (m != null) send(Frame.Text(m.encode())) }
                     }
                     presenter.state.collect { s ->
                         val now = System.currentTimeMillis()
@@ -356,6 +366,7 @@ class RemoteServer(
                         if (msg is ClientMessage.Hello) {
                             lean.set(app.selah.shared.FEATURE_KEEP_SLIDES in msg.features)
                             knowsPresentations.value = app.selah.shared.FEATURE_PRESENTATIONS in msg.features
+                            knowsWeek.value = app.selah.shared.FEATURE_WEEK in msg.features
                             // El celular se presenta: si es del equipo, su papel; si no, queda pidiendo entrar.
                             val id = msg.deviceId
                             if (team != null && id != null && TeamStore.validId(id)) {

@@ -7,7 +7,7 @@ import kotlin.test.Test
 
 /**
  * Servidor de Selah sin ventanas para probar la app del celular de punta a punta (emulador o iPad), sin cerrar
- * el Selah que esté abierto: escucha en otro puerto y aprueba como músico a cada celular nuevo que entre.
+ * el Selah que esté abierto: escucha en otro puerto y aprueba a cada celular nuevo que entre (como músico, o el papel de SELAH_E2E_ROLE).
  * Usa una COPIA de una carpeta Selah:
  *   SELAH_E2E_DIR=/copia/Selah SELAH_E2E_PORT=8785 SELAH_E2E_SECONDS=900 ./gradlew :desktopApp:test --tests '*PhoneE2ETool*'
  * Con el emulador de Android: adb reverse tcp:8765 tcp:8785 y en la app la dirección 127.0.0.1.
@@ -23,13 +23,16 @@ class PhoneE2ETool {
         val team = TeamStore(File(dir, "equipo.json"))
         val commands = Commands.create(library)
         val server = RemoteServer(commands, library, port, pin = MutableStateFlow("4334"), church = MutableStateFlow(ChurchFeatures.ALL), music = music, team = team)
+        // SELAH_E2E_ROLE=OPERATOR|MUSICIAN|DIRECTOR: el papel de los celulares (los ya aprobados también cambian).
+        val role = System.getenv("SELAH_E2E_ROLE")?.let { Role.valueOf(it) } ?: Role.MUSICIAN
+        team.team.value.members.forEach { m -> team.update(m.idHash) { it.copy(role = role) } }
         server.start()
         println("E2E: Selah escuchando en el puerto $port")
         val end = System.currentTimeMillis() + seconds * 1000
         while (System.currentTimeMillis() < end) {
             for (p in team.pending.value) {
-                team.approve(p.idHash, Role.MUSICIAN, "Piano")
-                println("E2E: aprobado como músico: ${p.name}")
+                team.approve(p.idHash, role, "Piano")
+                println("E2E: aprobado como ${role.label}: ${p.name}")
             }
             Thread.sleep(500)
         }

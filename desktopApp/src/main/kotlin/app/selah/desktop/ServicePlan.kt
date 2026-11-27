@@ -29,6 +29,11 @@ class ServicePlan(
     /** Nombres de las listas guardadas, la más reciente primero. */
     val saved: StateFlow<List<String>> = _saved.asStateFlow()
 
+    private val _savedVersion = MutableStateFlow(0)
+    /** Sube cada vez que cambia el contenido de alguna lista guardada (aunque los nombres sigan iguales). */
+    val savedVersion: StateFlow<Int> = _savedVersion.asStateFlow()
+    private fun savedChanged() { _saved.value = scanSaved(); _savedVersion.value++ }
+
     @Synchronized
     fun handle(msg: ClientMessage): String? = when (msg) {
         is ClientMessage.PlanAddSong, is ClientMessage.PlanAddBible, is ClientMessage.PlanAddSermon,
@@ -64,7 +69,7 @@ class ServicePlan(
         }.isSuccess
         if (!ok) return "No pude guardar la lista"
         update { it.copy(name = clean) }
-        _saved.value = scanSaved()
+        savedChanged()
         return null
     }
 
@@ -83,7 +88,7 @@ class ServicePlan(
             File(listsDir, "$clean.json").writeText(ProtocolJson.encodeToString(ServicePlanState.serializer(), ServicePlanState(items, name = clean)), Charsets.UTF_8)
         }.isSuccess
         if (!ok) return "No pude guardar la lista"
-        _saved.value = scanSaved()
+        savedChanged()
         return null
     }
 
@@ -130,13 +135,13 @@ class ServicePlan(
     @Synchronized
     fun reloadFromDisk() {
         _state.value = load(file) ?: ServicePlanState()
-        _saved.value = scanSaved()
+        savedChanged()
     }
 
     @Synchronized
     fun deleteSaved(name: String) {
         File(listsDir, "$name.json").delete()
-        _saved.value = scanSaved()
+        savedChanged()
     }
 
     private fun scanSaved(): List<String> = listsDir.listFiles { f -> f.isFile && f.extension == "json" }.orEmpty()
@@ -193,6 +198,7 @@ class ServicePlan(
             val fixed = saved.fixed()
             if (fixed != saved) runCatching { f.writeText(ProtocolJson.encodeToString(ServicePlanState.serializer(), fixed), Charsets.UTF_8) }
         }
+        savedChanged()
     }
 
     private fun update(f: (ServicePlanState) -> ServicePlanState) {

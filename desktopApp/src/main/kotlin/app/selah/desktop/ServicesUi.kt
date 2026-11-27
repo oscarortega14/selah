@@ -131,28 +131,6 @@ fun SongTagsButton(song: SongSummary, worship: Worship) {
     }
 }
 
-/** Aviso arriba de la lista: el culto de hoy, la lista que le toca y preparar desde la plantilla. */
-@Composable
-fun TodayServiceBanner(worship: Worship, onOpenList: (String) -> Unit, onPrepare: (WorshipService) -> Unit) {
-    val now = java.time.LocalDateTime.now()
-    val service = worship.config.serviceFor(now.dayOfWeek.value, now.hour * 60 + now.minute)
-    if (service == null) {
-        TextButton(worship.openServices, Modifier.hand()) { Text(if (worship.config.services.isEmpty()) "Configurar los cultos de la iglesia…" else "Cultos…") }
-        return
-    }
-    val next = service.listFor(LocalDate.now().toString(), worship.savedLists)
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Hoy: ${service.label}", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
-                TextButton(worship.openServices, Modifier.hand(), contentPadding = androidx.compose.foundation.layout.PaddingValues(4.dp)) { Text("Cultos…") }
-            }
-            if (next != null) Button({ onOpenList(next) }, Modifier.fillMaxWidth().hand()) { Text("Abrir «$next» (le toca hoy)") }
-            if (service.steps.isNotEmpty()) OutlinedButton({ onPrepare(service) }, Modifier.fillMaxWidth().hand()) { Text("Preparar desde la plantilla…") }
-        }
-    }
-}
-
 /** Una elección del asistente para preparar el culto. */
 private class Choice(val step: ServiceStep, val label: String) {
     var include by mutableStateOf(true)
@@ -192,20 +170,8 @@ fun matchStepsToItems(steps: List<ServiceStep>, items: List<PlanItem>): List<Pla
     }
 }
 
-/** Los cultos de los próximos [days] días desde [from] (hoy incluido): índice del culto y fecha, en orden. */
-fun upcomingServices(cfg: ServicesConfig, from: LocalDate, days: Int = 7): List<Pair<Int, LocalDate>> =
-    (0 until days).flatMap { k ->
-        val d = from.plusDays(k.toLong())
-        cfg.services.withIndex().filter { it.value.day == d.dayOfWeek.value }
-            .sortedBy { app.selah.shared.parseMinutes(it.value.time) ?: 0 }
-            .map { it.index to d }
-    }
-
 /** Nombre de la lista planeada: "Domingo 29 nov". */
 fun plannedListName(service: WorshipService, date: LocalDate): String = "${service.name} ${date.dayOfMonth} ${MONTHS[date.monthValue - 1]}"
-
-/** "domingo 29 nov" */
-private fun dayText(date: LocalDate) = "${DAY_NAMES[date.dayOfWeek.value - 1]} ${date.dayOfMonth} ${MONTHS[date.monthValue - 1]}"
 
 /**
  * Asistente de la plantilla: un renglón por paso, con selects y canciones sugeridas (las de ese tipo que llevan
@@ -286,72 +252,26 @@ fun PrepareServiceDialog(
 }
 
 /**
- * "Planificar la semana": los cultos de los próximos 7 días, cada uno con su plantilla. Se eligen las canciones
- * una vez y el día del culto la lista aparece en el aviso de arriba ("Abrir «Domingo 29 nov» (le toca hoy)").
+ * Elegir las canciones de un culto ([index] en la configuración) para la fecha [date]: su plantilla con selects.
+ * Se guarda como la lista de ese día; no propone las que ya están en los otros cultos de la semana.
  */
 @Composable
-fun WeekPlanDialog(worship: Worship, send: (ClientMessage) -> Unit, onClose: () -> Unit) {
-    val today = remember { LocalDate.now() }
+fun ChooseSongsDialog(worship: Worship, index: Int, date: LocalDate, send: (ClientMessage) -> Unit, onClose: () -> Unit) {
     val cfg = worship.config
-    val week = upcomingServices(cfg, today)
-    var editing by remember { mutableStateOf<Pair<Int, LocalDate>?>(null) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        modifier = Modifier.width(640.dp),
-        title = { Text("Planificar la semana") },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (week.isEmpty()) {
-                    Text("No hay cultos configurados. Agrégalos en Cultos… con su día, hora y plantilla.")
-                    TextButton({ onClose(); worship.openServices() }, Modifier.hand()) { Text("Abrir Cultos…") }
-                }
-                for ((i, date) in week) {
-                    val s = cfg.services[i]
-                    val planned = s.planned[date.toString()]?.takeIf { p -> worship.savedLists.any { it.equals(p, ignoreCase = true) } }
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                Text("${s.name} · ${dayText(date)}" + if (s.time.isBlank()) "" else " · ${s.time}", fontWeight = FontWeight.Medium)
-                                Text(
-                                    when {
-                                        s.steps.isEmpty() -> "Sin plantilla: ármala en Cultos…"
-                                        planned != null -> "✓ Lista: «$planned»"
-                                        else -> "Sin planear"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (planned != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (planned != null) TextButton({ send(ClientMessage.PlanOpen(planned)); onClose() }, Modifier.hand()) { Text("Abrir ahora") }
-                            if (s.steps.isNotEmpty()) {
-                                if (planned != null) OutlinedButton({ editing = i to date }, Modifier.hand()) { Text("Cambiar…") }
-                                else Button({ editing = i to date }, Modifier.hand()) { Text("Elegir canciones…") }
-                            }
-                        }
-                    }
-                }
+    val s = cfg.services.getOrNull(index)
+    if (s == null) { onClose(); return }
+    val others = upcomingServices(cfg, LocalDate.now()).filter { it != (index to date) }.flatMap { (j, d) ->
+        cfg.services[j].planned[d.toString()]?.let(worship.savedItems).orEmpty().filter { it.kind == PlanKind.SONG }.map { it.ref }
+    }.toSet()
+    PrepareServiceDialog(
+        s, worship, send, date = date, exclude = others,
+        onSaved = { list ->
+            worship.update { c ->
+                c.copy(services = c.services.mapIndexed { k, svc -> if (k == index) svc.copy(planned = svc.planned + (date.toString() to list)) else svc })
             }
         },
-        confirmButton = { Button(onClose, Modifier.hand()) { Text("Listo") } },
-        dismissButton = { TextButton({ onClose(); worship.openServices() }, Modifier.hand()) { Text("Cultos y plantillas…") } },
+        onClose = onClose,
     )
-    val current = editing
-    val s = current?.let { cfg.services.getOrNull(it.first) }
-    if (current != null && s != null) {
-        val (i, date) = current
-        // No repetir lo que ya se planeó para los otros cultos de la semana.
-        val others = week.filter { it != (i to date) }.flatMap { (j, d) ->
-            cfg.services[j].planned[d.toString()]?.let(worship.savedItems).orEmpty().filter { it.kind == PlanKind.SONG }.map { it.ref }
-        }.toSet()
-        PrepareServiceDialog(
-            s, worship, send, date = date, exclude = others,
-            onSaved = { list ->
-                worship.update { c ->
-                    c.copy(services = c.services.mapIndexed { k, svc -> if (k == i) svc.copy(planned = svc.planned + (date.toString() to list)) else svc })
-                }
-            },
-        ) { editing = null }
-    }
 }
 
 @Composable

@@ -95,6 +95,7 @@ internal fun RemoteApp(
     val scores by client.scores.collectAsState()
     val sequences by client.sequences.collectAsState()
     val songView by client.songView.collectAsState()
+    val week by client.week.collectAsState()
     // La canción que el músico mira por su cuenta: aquí arriba para que un corte del Wi-Fi no lo devuelva a en vivo.
     val musicianBrowsing = rememberSaveable { mutableStateOf<String?>(null) }
     // Ver otra canción sin proyectarla: solo con un PC que lo entiende.
@@ -184,7 +185,7 @@ internal fun RemoteApp(
                     onNeedPin = { if (!rolesOnPc) musicianWantsPin = true },
                     prefs = store, suggestedInstrument = auth?.instrument.takeIf { rolesOnPc },
                     showControls = !rolesOnPc || pcRole?.can(app.selah.shared.Permission.MUSIC) == true,
-                    songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing,
+                    songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing, week = week,
                 )
             }
         } else {
@@ -223,7 +224,11 @@ internal fun RemoteApp(
                             goLive()
                         },
                     )
-                    3 -> PlanTab(plan, savedLists, state.stageMessage, client::send, todayService) { goLive() }
+                    3 -> ListTab(
+                        client, plan, savedLists, state.stageMessage, client::send, todayService, week, features, scores,
+                        instrument, onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) }, prefs = store,
+                        songView = songView, onView = viewSong,
+                    ) { goLive() }
                     4 -> MoreTab(
                         state, announcements, presentations, sermons, client.serverOffset, client::send,
                         onUpload = client::uploadAnnouncement,
@@ -233,7 +238,7 @@ internal fun RemoteApp(
                         client, state, features, scores, sequences, instrument,
                         onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
                         canControl = !needsPin, onNeedPin = { pinDismissed = false }, prefs = store,
-                        songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing,
+                        songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing, week = week,
                     )
                 }
             }
@@ -473,93 +478,6 @@ private fun Controls(state: PresentationState, send: (ClientMessage) -> Unit) {
     }
 }
 
-@Composable
-private fun PlanTab(
-    plan: ServicePlanState,
-    saved: List<String>,
-    stageMessage: String,
-    send: (ClientMessage) -> Unit,
-    todayService: Pair<String, String?> = "" to null,
-    onPlayed: () -> Unit,
-) {
-    var msg by rememberSaveable { mutableStateOf("") }
-    var saving by rememberSaveable { mutableStateOf(false) }
-    var opening by rememberSaveable { mutableStateOf(false) }
-    if (saving) SavePlanDialog(plan.name.ifEmpty { suggestedListName() }, { saving = false }) { name -> saving = false; send(ClientMessage.PlanSave(name)) }
-    if (opening) OpenPlanDialog(saved, { opening = false }) { name -> opening = false; send(ClientMessage.PlanOpen(name)) }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // El culto de hoy (configurado en el PC) y la lista que le toca en su rotación.
-        val (service, list) = todayService
-        if (service.isNotEmpty()) item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Hoy: $service", fontWeight = FontWeight.Medium)
-                    if (list != null && list != plan.name) Button({ send(ClientMessage.PlanOpen(list)) }, Modifier.fillMaxWidth()) { Text("Abrir «$list» (le toca hoy)") }
-                    else if (list != null) Text("La lista de hoy ya está abierta.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Lista del culto", style = MaterialTheme.typography.titleLarge)
-                    if (plan.name.isNotEmpty()) Text(plan.name, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Button({ send(ClientMessage.PlanNext); onPlayed() }, enabled = plan.current < plan.items.lastIndex) {
-                    Text("Siguiente ▶")
-                }
-            }
-            Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton({ saving = true }, Modifier.weight(1f), enabled = plan.items.isNotEmpty()) { Text("Guardar") }
-                OutlinedButton({ opening = true }, Modifier.weight(1f), enabled = saved.isNotEmpty()) { Text("Abrir (${saved.size})") }
-            }
-            if (plan.items.isEmpty()) {
-                Text(
-                    "Vacía. Agrega canciones con \"+\" o citas desde Biblia.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            }
-        }
-        itemsIndexed(plan.items) { i, item ->
-            val selected = i == plan.current
-            Card(
-                Modifier.fillMaxWidth().clickable { send(ClientMessage.PlanGo(i)); onPlayed() },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-                        Text("${i + 1}. ${item.title}", fontSize = 17.sp, fontWeight = FontWeight.Medium)
-                        Text(when (item.kind) { PlanKind.BIBLE -> "Lectura"; PlanKind.MEDIA -> "Anuncio"; PlanKind.SERMON -> "Predicación"; PlanKind.PRESENTATION -> "Presentación"; else -> "Canción" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton({ send(ClientMessage.PlanMove(i, i - 1)) }, enabled = i > 0) { Text("▲") }
-                    TextButton({ send(ClientMessage.PlanMove(i, i + 1)) }, enabled = i < plan.items.lastIndex) { Text("▼") }
-                    TextButton({ send(ClientMessage.PlanRemove(i)) }) { Text("✕") }
-                }
-            }
-        }
-        item {
-            Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Mensaje al escenario", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(
-                    msg, { msg = it },
-                    placeholder = { Text("Ej. Repetir coro · 2 minutos") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { send(ClientMessage.StageMessage(msg)) }),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button({ send(ClientMessage.StageMessage(msg)) }, Modifier.weight(1f)) { Text("Enviar") }
-                    OutlinedButton({ msg = ""; send(ClientMessage.StageMessage("")) }) { Text("Borrar") }
-                }
-                if (stageMessage.isNotEmpty()) Text("En escenario: $stageMessage", color = MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
 
 @Composable
 private fun MoreTab(

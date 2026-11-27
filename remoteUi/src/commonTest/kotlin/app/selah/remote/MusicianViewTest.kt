@@ -38,6 +38,21 @@ class MusicianViewTest {
     }
 
     @Test
+    fun theWeekServicesOfferTheirSongs() {
+        val songs = listOf(SongSummary("a", "Águila"), SongSummary("b", "Bendito"))
+        val week = listOf(
+            app.selah.shared.WeekService("Domingo", "2026-11-29", "domingo 29 nov", items = listOf(
+                PlanItem(PlanKind.SONG, "b", "Bendito"), PlanItem(PlanKind.SERMON, "p", "Predicación: X"), PlanItem(PlanKind.SONG, "zz", "Nueva"),
+            )),
+            app.selah.shared.WeekService("Miércoles", "2026-12-02", "miércoles 2 dic"),
+        )
+        val all = weekChoices(week, songs, "")
+        assertEquals(1, all.size) // el miércoles sin canciones no sale
+        assertEquals(listOf("b", "zz"), all[0].second.map { it.id }) // sin la predicación; la que no está en el catálogo, con su título
+        assertEquals(listOf("zz"), weekChoices(week, songs, "nueva")[0].second.map { it.id })
+    }
+
+    @Test
     fun theServiceListComesFirstWhenChoosingASong() {
         val songs = listOf(SongSummary("a", "Águila"), SongSummary("b", "Bendito"), SongSummary("c", "Cordero"), SongSummary("d", "Digno"))
         val plan = ServicePlanState(listOf(

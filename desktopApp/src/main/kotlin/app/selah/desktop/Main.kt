@@ -92,6 +92,7 @@ fun main() {
         val catalog by library.catalog.collectAsState()
         val plan by commands.plan.state.collectAsState()
         val savedLists by commands.plan.saved.collectAsState()
+        val savedVersion by commands.plan.savedVersion.collectAsState()
         var projectorOn by remember { mutableStateOf(true) }
         val settings by settingsStore.settings.collectAsState()
         // Pantallas conectadas: se revisan cada pocos segundos por si enchufan el videobeam después.
@@ -203,7 +204,7 @@ fun main() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 val presentationsReady by library.presentations.ready.collectAsState()
                 val servicesCfg by commands.services!!.config.collectAsState()
-                val worship = remember(servicesCfg, savedLists, catalog, lastSung) {
+                val worship = remember(servicesCfg, savedLists, savedVersion, catalog, lastSung) {
                     Worship(
                         config = servicesCfg,
                         update = { f -> scope.launch(Dispatchers.IO) { commands.services?.update(f) } },
