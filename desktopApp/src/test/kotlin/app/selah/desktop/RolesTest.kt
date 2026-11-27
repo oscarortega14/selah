@@ -146,6 +146,16 @@ class RolesTest {
                 assertEquals("Tu papel (Músico) no permite eso", refused(ClientMessage.SelectSong("A")))
                 assertEquals("Tu papel (Músico) no permite eso", refused(ClientMessage.StartClick(90)))
                 assertEquals("Tu papel (Músico) no permite eso", refused(ClientMessage.PlanClear))
+                // Pero mira cualquier canción por su cuenta: le llega solo a él y el videobeam no cambia
+                val shownBefore = commands.presenter.state.value
+                say(ClientMessage.SongView("A"))
+                val seen = until { it is ServerMessage.SongView } as ServerMessage.SongView
+                assertEquals("A", seen.title)
+                assertEquals(listOf("uno", "dos"), seen.slides.map { it.text })
+                assertEquals(shownBefore, commands.presenter.state.value)
+                say(ClientMessage.SongView("no-existe"))
+                assertTrue((until { it is ServerMessage.SongView } as ServerMessage.SongView).slides.isEmpty())
+                assertTrue(app.selah.shared.FEATURE_SONG_VIEW in lib.features)
 
                 // Director: click sí, la letra no
                 team.update(TeamStore.hash(juan)) { it.copy(role = Role.DIRECTOR) }

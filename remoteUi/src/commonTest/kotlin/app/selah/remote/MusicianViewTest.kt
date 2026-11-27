@@ -4,7 +4,12 @@ import app.selah.shared.FEATURE_CHORDS
 import app.selah.shared.FEATURE_CLICK
 import app.selah.shared.FEATURE_SCORES
 import app.selah.shared.FEATURE_SEQUENCES
+import app.selah.shared.PlanItem
+import app.selah.shared.PlanKind
+import app.selah.shared.PresentationState
 import app.selah.shared.ScoreRef
+import app.selah.shared.ServicePlanState
+import app.selah.shared.Slide
 import app.selah.shared.ServerMessage
 import app.selah.shared.SongSummary
 import app.selah.shared.decodeServerMessage
@@ -15,6 +20,39 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MusicianViewTest {
+    @Test
+    fun theMusicianLooksAtAnotherSongWithoutBeingPulledBack() {
+        val live = PresentationState("Juan 3:16", listOf(Slide("16", "Porque de tal manera…")), 0, isBible = true)
+        // Siguiendo al operador: lo que está en pantalla (Biblia incluida)
+        assertEquals(live, musicianShown(live, browsing = null, viewed = null))
+        // Eligió otra canción y todavía no llega: se espera
+        assertEquals(null, musicianShown(live, browsing = "b", viewed = null))
+        assertEquals(null, musicianShown(live, browsing = "b", viewed = ServerMessage.SongView("a", "A", listOf(Slide(text = "x")))))
+        // Llegó: la ve aunque el operador esté en la Biblia, sin diapositiva resaltada
+        val b = musicianShown(live, "b", ServerMessage.SongView("b", "B", listOf(Slide("Coro", "la la", chords = "[G]la la"))))!!
+        assertEquals("B", b.title)
+        assertEquals("b", b.songId)
+        assertEquals(-1, b.index)
+        assertFalse(b.isBible)
+        assertEquals("[G]la la", b.slides.single().chords)
+    }
+
+    @Test
+    fun theServiceListComesFirstWhenChoosingASong() {
+        val songs = listOf(SongSummary("a", "Águila"), SongSummary("b", "Bendito"), SongSummary("c", "Cordero"), SongSummary("d", "Digno"))
+        val plan = ServicePlanState(listOf(
+            PlanItem(PlanKind.SONG, "c", "Cordero"), PlanItem(PlanKind.BIBLE, "Juan 3:16", "Juan 3:16"),
+            PlanItem(PlanKind.SONG, "a", "Águila"), PlanItem(PlanKind.SONG, "zz", "Borrada"),
+        ))
+        val (inPlan, others) = musicianChoices(plan, songs, "")
+        assertEquals(listOf("c", "a"), inPlan.map { it.id }) // en el orden del culto, sin la Biblia ni la que ya no existe
+        assertEquals(listOf("b", "d"), others.map { it.id })
+        // Buscar sin tildes filtra las dos partes
+        val (p2, o2) = musicianChoices(plan, songs, "aguila")
+        assertEquals(listOf("a"), p2.map { it.id })
+        assertTrue(o2.isEmpty())
+    }
+
     @Test
     fun theMusicianSeesTheBestThereIs() {
         val all = listOf(FEATURE_SCORES, FEATURE_CHORDS)

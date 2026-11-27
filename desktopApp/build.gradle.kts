@@ -56,6 +56,9 @@ dependencies {
     implementation("org.jcodec:jcodec-javase:0.2.5")
 
     testImplementation(kotlin("test"))
+    // Pruebas que tocan la interfaz (clics, textos) y toman capturas.
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
     testImplementation("io.ktor:ktor-client-cio:$ktor")
     testImplementation("io.ktor:ktor-client-websockets:$ktor")
 }

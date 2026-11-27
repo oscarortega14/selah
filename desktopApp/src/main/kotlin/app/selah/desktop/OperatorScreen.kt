@@ -623,6 +623,11 @@ private fun PlanPanel(
         // El culto de hoy: abrir la lista que le toca o prepararla desde la plantilla.
         if (worship != null) TodayServiceBanner(worship, onOpenList = { send(ClientMessage.PlanOpen(it)) }, onPrepare = { preparing = it })
         preparing?.let { svc -> if (worship != null) PrepareServiceDialog(svc, worship, send) { preparing = null } }
+        var planningWeek by remember { mutableStateOf(false) }
+        if (worship != null && worship.config.services.isNotEmpty()) {
+            OutlinedButton({ planningWeek = true }, Modifier.fillMaxWidth().hand(), contentPadding = PaddingValues(6.dp)) { Text("Planificar la semana…") }
+        }
+        if (planningWeek && worship != null) WeekPlanDialog(worship, send) { planningWeek = false }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Orden del culto", style = MaterialTheme.typography.titleSmall)
@@ -645,7 +650,8 @@ private fun PlanPanel(
         }
         if (plan.items.isEmpty()) {
             Text(
-                "Vacía. Usa \"+ Lista\" en las canciones o \"+ A la lista\" en la Biblia para preparar el culto.",
+                "Vacía. Usa \"Planificar la semana…\" para elegir las canciones de cada culto con su plantilla, " +
+                    "o agrega una por una con \"+ Lista\" en las pestañas Canciones, Biblia o Anuncios.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

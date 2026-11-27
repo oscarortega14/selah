@@ -31,24 +31,9 @@ class ServicePlan(
 
     @Synchronized
     fun handle(msg: ClientMessage): String? = when (msg) {
-        is ClientMessage.PlanAddSong -> {
-            val song = library.song(msg.id)
-            if (song == null) "Canción no encontrada" else { update { it.copy(items = it.items + PlanItem(PlanKind.SONG, song.id, song.title)) }; null }
-        }
-        is ClientMessage.PlanAddBible -> addBible(msg.reference)
-        is ClientMessage.PlanAddSermon -> {
-            val sermon = library.sermon(msg.id)
-            if (sermon == null) "Predicación no encontrada"
-            else { update { it.copy(items = it.items + PlanItem(PlanKind.SERMON, sermon.id, "Predicación: ${sermon.title}")) }; null }
-        }
-        is ClientMessage.PlanAddMedia -> {
-            if (library.announcementFile(msg.name) == null) "Anuncio no encontrado"
-            else { update { it.copy(items = it.items + PlanItem(PlanKind.MEDIA, msg.name, "Anuncio: ${msg.name.substringBeforeLast('.')}")) }; null }
-        }
-        is ClientMessage.PlanAddPresentation -> {
-            if (library.presentations.file(msg.name) == null) "Presentación no encontrada"
-            else { update { it.copy(items = it.items + PlanItem(PlanKind.PRESENTATION, msg.name, "Presentación: ${msg.name.substringBeforeLast('.')}")) }; null }
-        }
+        is ClientMessage.PlanAddSong, is ClientMessage.PlanAddBible, is ClientMessage.PlanAddSermon,
+        is ClientMessage.PlanAddMedia, is ClientMessage.PlanAddPresentation,
+        -> itemFor(msg).fold({ item -> update { it.copy(items = it.items + item) }; null }, { it.message })
         is ClientMessage.PlanRemove -> { remove(msg.index); null }
         is ClientMessage.PlanMove -> { move(msg.from, msg.to); null }
         is ClientMessage.PlanGo -> go(msg.index)
@@ -83,6 +68,52 @@ class ServicePlan(
         return null
     }
 
+    /**
+     * Guarda una lista con nombre sin tocar la de ahora ("Planificar la semana"). [adds] son las mismas órdenes
+     * "+ Lista" de siempre; si alguna no sirve (canción borrada, cita mal escrita) no se guarda nada.
+     */
+    @Synchronized
+    fun saveItems(name: String, adds: List<ClientMessage>): String? {
+        val typed = cleanListName(name) ?: return "Escribe un nombre para la lista"
+        val items = adds.map { msg -> itemFor(msg).getOrElse { return it.message } }
+        if (items.isEmpty()) return "La lista está vacía"
+        val clean = scanSaved().firstOrNull { it.equals(typed, ignoreCase = true) } ?: typed
+        val ok = runCatching {
+            listsDir.mkdirs()
+            File(listsDir, "$clean.json").writeText(ProtocolJson.encodeToString(ServicePlanState.serializer(), ServicePlanState(items, name = clean)), Charsets.UTF_8)
+        }.isSuccess
+        if (!ok) return "No pude guardar la lista"
+        _saved.value = scanSaved()
+        return null
+    }
+
+    /** Lo que tiene una lista guardada, sin abrirla (null si no existe). */
+    @Synchronized
+    fun savedItems(name: String): List<PlanItem>? {
+        val found = scanSaved().firstOrNull { it.equals(name, ignoreCase = true) } ?: return null
+        return load(File(listsDir, "$found.json"))?.items
+    }
+
+    /** El elemento que agrega una orden "+ Lista", o por qué no se puede. */
+    private fun itemFor(msg: ClientMessage): Result<PlanItem> {
+        fun fail(m: String?) = Result.failure<PlanItem>(IllegalArgumentException(m))
+        return when (msg) {
+            is ClientMessage.PlanAddSong -> library.song(msg.id)?.let { Result.success(PlanItem(PlanKind.SONG, it.id, it.title)) } ?: fail("Canción no encontrada")
+            is ClientMessage.PlanAddBible -> {
+                val bible = library.bible ?: return fail("No hay Biblia cargada")
+                try { bible.lookup(msg.reference).let { Result.success(PlanItem(PlanKind.BIBLE, it.title, it.title)) } } catch (e: IllegalArgumentException) { fail(e.message) }
+            }
+            is ClientMessage.PlanAddSermon -> library.sermon(msg.id)?.let { Result.success(PlanItem(PlanKind.SERMON, it.id, "Predicación: ${it.title}")) } ?: fail("Predicación no encontrada")
+            is ClientMessage.PlanAddMedia ->
+                if (library.announcementFile(msg.name) == null) fail("Anuncio no encontrado")
+                else Result.success(PlanItem(PlanKind.MEDIA, msg.name, "Anuncio: ${msg.name.substringBeforeLast('.')}"))
+            is ClientMessage.PlanAddPresentation ->
+                if (library.presentations.file(msg.name) == null) fail("Presentación no encontrada")
+                else Result.success(PlanItem(PlanKind.PRESENTATION, msg.name, "Presentación: ${msg.name.substringBeforeLast('.')}"))
+            else -> fail("No se puede agregar a la lista")
+        }
+    }
+
     /** Reemplaza la lista actual por una guardada. */
     @Synchronized
     fun open(name: String): String? {
@@ -111,13 +142,6 @@ class ServicePlan(
     private fun scanSaved(): List<String> = listsDir.listFiles { f -> f.isFile && f.extension == "json" }.orEmpty()
         .sortedByDescending { it.lastModified() }
         .map { it.nameWithoutExtension }
-
-    private fun addBible(reference: String): String? {
-        val bible = library.bible ?: return "No hay Biblia cargada"
-        val passage = try { bible.lookup(reference) } catch (e: IllegalArgumentException) { return e.message }
-        update { it.copy(items = it.items + PlanItem(PlanKind.BIBLE, passage.title, passage.title)) }
-        return null
-    }
 
     private fun go(index: Int): String? {
         val item = _state.value.items.getOrNull(index) ?: return null
@@ -187,7 +211,7 @@ class ServicePlan(
 }
 
 
-private val MONTHS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+internal val MONTHS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
 /** Nombre sugerido: el próximo domingo (o hoy si es domingo), ej. "Culto domingo 8 nov 2026". */
 fun suggestedListName(today: java.time.LocalDate = java.time.LocalDate.now()): String {

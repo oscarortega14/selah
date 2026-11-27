@@ -59,6 +59,57 @@ class ServicesStoreTest {
     }
 
     @Test
+    fun planningTheWeekSavesEachServiceWithoutTouchingTheCurrentList() {
+        // La lista de ahora (lo que está sonando) no se toca al planear
+        saveList("Ahora")
+        val before = commands.plan.state.value
+        val domingo = WorshipService(
+            "Domingo", 7, "9:00",
+            steps = listOf(ServiceStep(StepKind.SONG, "Alabanza"), ServiceStep(StepKind.SONG, "Adoración"), ServiceStep(StepKind.BIBLE)),
+        )
+        val miercoles = WorshipService("Miércoles", 3, "7:00 p.m.", steps = listOf(ServiceStep(StepKind.SONG)))
+        val services = commands.services!!
+        services.update { it.copy(services = listOf(domingo, miercoles)) }
+
+        // Jueves 26 nov 2026: la semana trae domingo 29 y miércoles 2 dic, en orden
+        val thursday = LocalDate.of(2026, 11, 26)
+        val week = upcomingServices(services.config.value, thursday)
+        assertEquals(listOf(0 to LocalDate.of(2026, 11, 29), 1 to LocalDate.of(2026, 12, 2)), week)
+        assertEquals("Domingo 29 nov", plannedListName(domingo, LocalDate.of(2026, 11, 29)))
+
+        // Guardar con nombre, sin abrirla
+        assertNull(commands.plan.saveItems("Domingo 29 nov", listOf(ClientMessage.PlanAddSong("B"), ClientMessage.PlanAddSong("A"))))
+        assertEquals(before, commands.plan.state.value)
+        assertEquals(listOf("B", "A"), commands.plan.savedItems("domingo 29 nov")!!.map { it.ref })
+        // Si algo no sirve, no se guarda nada a medias
+        assertEquals("Canción no encontrada", commands.plan.saveItems("Mala", listOf(ClientMessage.PlanAddSong("A"), ClientMessage.PlanAddSong("no-existe"))))
+        assertNull(commands.plan.savedItems("Mala"))
+        assertEquals("La lista está vacía", commands.plan.saveItems("Vacía", emptyList()))
+
+        // Ese domingo le toca la planeada (aunque haya rotación); otro domingo, la rotación
+        services.update { c -> c.copy(services = c.services.mapIndexed { i, s -> if (i == 0) s.copy(planned = mapOf("2026-11-29" to "Domingo 29 nov"), rotation = listOf("Ahora")) else s }) }
+        val saved = commands.plan.saved.value
+        assertEquals("Domingo · domingo 9:00" to "Domingo 29 nov", todaySuggestion(services.config.value, saved, LocalDateTime.of(2026, 11, 29, 8, 0)))
+        assertEquals("Domingo · domingo 9:00" to "Ahora", todaySuggestion(services.config.value, saved, LocalDateTime.of(2026, 12, 6, 8, 0)))
+        // Se recuerda en cultos.json
+        assertEquals("Domingo 29 nov", ServicesStore(File(dir, "cultos.json")).config.value.services[0].planned["2026-11-29"])
+
+        // Al volver a abrir el planeado, cada paso recibe lo suyo (canción con canción, lectura con lectura)
+        val items = commands.plan.savedItems("Domingo 29 nov")!!
+        assertEquals(listOf("B", "A", null), matchStepsToItems(domingo.steps, items).map { it?.ref })
+    }
+
+    @Test
+    fun onlyTheNewestPlannedDatesAreKept() {
+        val store = ServicesStore(File(dir, "c3.json"))
+        val many = (1..50).associate { "2026-%02d-%02d".format(1 + it / 28, 1 + it % 28) to "L$it" }
+        store.update { it.copy(services = listOf(WorshipService("Domingo", 7, planned = many))) }
+        val kept = store.config.value.services[0].planned
+        assertEquals(ServicesStore.MAX_PLANNED, kept.size)
+        assertEquals(many.keys.max(), kept.keys.max())
+    }
+
+    @Test
     fun todaysSuggestionForPhones() {
         val cfg = app.selah.shared.ServicesConfig(listOf(WorshipService("Dominical", 7, "9:00", rotation = listOf("X", "Y"), lastUsed = "X")))
         val sunday = LocalDateTime.of(2026, 11, 8, 8, 0) // domingo

@@ -3,6 +3,7 @@ package app.selah.remote
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +26,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -51,7 +54,12 @@ import app.selah.shared.FEATURE_CLICK
 import app.selah.shared.FEATURE_SCORES
 import app.selah.shared.FEATURE_SEQUENCES
 import app.selah.shared.GENERAL_INSTRUMENT
+import app.selah.shared.PlanKind
 import app.selah.shared.PresentationState
+import app.selah.shared.ServerMessage
+import app.selah.shared.ServicePlanState
+import app.selah.shared.SongSummary
+import app.selah.shared.search
 import app.selah.shared.ScoreRef
 import app.selah.shared.Transpose
 import app.selah.shared.instrumentsOf
@@ -73,8 +81,29 @@ fun musicViews(features: List<String>, hasScore: Boolean, hasChords: Boolean): L
 }
 
 /**
+ * Lo que ve el músico: lo que está en pantalla, o la canción que eligió mirar por su cuenta ([browsing]) cuando
+ * ya llegó del PC. null = la eligió pero todavía no llega (se muestra "Cargando…").
+ */
+fun musicianShown(live: PresentationState, browsing: String?, viewed: ServerMessage.SongView?): PresentationState? = when {
+    browsing == null -> live
+    viewed?.id != browsing -> null
+    // Sin diapositiva marcada: el videobeam no la está mostrando, así que nada se resalta ni se desplaza solo.
+    else -> PresentationState(viewed.title, viewed.slides, index = -1, songId = viewed.id)
+}
+
+/** Para elegir otra canción: primero las de la lista del culto (en su orden), después las demás que coinciden. */
+fun musicianChoices(plan: ServicePlanState, songs: List<SongSummary>, query: String): Pair<List<SongSummary>, List<SongSummary>> {
+    val byId = songs.associateBy { it.id }
+    val inPlan = plan.items.filter { it.kind == PlanKind.SONG }.mapNotNull { byId[it.ref] }.distinctBy { it.id }
+    val found = songs.search(query)
+    val planIds = inPlan.map { it.id }.toSet()
+    return inPlan.filter { it in found } to found.filter { it.id !in planIds }
+}
+
+/**
  * Pantalla del músico: la canción en pantalla con su partitura (la de su instrumento), los acordes en el tono
- * que quiera, o la letra; y el click o la secuencia. Sigue sola al operador: no hay que tocar nada.
+ * que quiera, o la letra; y el click o la secuencia. Sigue sola al operador, pero puede mirar otra canción por su
+ * cuenta ("Ver otra canción") sin que el videobeam cambie ni lo saquen de ahí, hasta que toque "Volver a en vivo".
  */
 @Composable
 fun MusicianView(
@@ -93,7 +122,26 @@ fun MusicianView(
     suggestedInstrument: String? = null,
     /** Mostrar los botones de iniciar/parar el click y la secuencia (el músico con papel solo ve el pulso). */
     showControls: Boolean = true,
+    /** Para mirar otra canción por su cuenta: las canciones, la lista del culto y la que llegó del PC. */
+    songs: List<SongSummary> = emptyList(),
+    plan: ServicePlanState = ServicePlanState(),
+    viewed: ServerMessage.SongView? = null,
+    /** Pide una canción al PC sin proyectarla; null = este PC no sabe (no se ofrece). */
+    onView: ((String) -> Unit)? = null,
+    /** La canción que mira por su cuenta (null = sigue al operador). Vive afuera para no perderse al reconectar. */
+    browsingState: androidx.compose.runtime.MutableState<String?> = rememberSaveable { mutableStateOf(null) },
 ) {
+    val live = state
+    var browsing by browsingState
+    var picking by rememberSaveable { mutableStateOf(false) }
+    // Si el operador pone justo la que estaba mirando, vuelve a seguirlo (con la diapositiva resaltada).
+    LaunchedEffect(live.songId, live.isBible) { if (browsing != null && !live.isBible && live.songId == browsing) browsing = null }
+    // Al reconectar se vuelve a pedir la que estaba mirando.
+    LaunchedEffect(browsing, viewed == null) { browsing?.let { if (viewed?.id != it) onView?.invoke(it) } }
+    @Suppress("NAME_SHADOWING")
+    val state = musicianShown(live, browsing, viewed) ?: PresentationState(title = songs.find { it.id == browsing }?.title.orEmpty())
+    val loading = browsing != null && viewed?.id != browsing
+    val liveSongId = live.songId?.takeIf { !live.isBible && !live.sermon && live.media == null && live.presentation == null }
     val songId = state.songId?.takeIf { !state.isBible && !state.sermon && state.media == null && state.presentation == null }
     val score = songId?.let { scoreFor(scores, it, instrument) }
     val hasChords = state.slides.any { it.chords.isNotEmpty() }
@@ -123,18 +171,31 @@ fun MusicianView(
     // iPad o tablet: el título en una línea y todos los controles en una sola fila, para que quepa más partitura.
     val wide = maxWidth >= WIDE
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || state.click != null)) {
+        if ((FEATURE_CLICK in features || FEATURE_SEQUENCES in features) && (showControls || live.click != null)) {
             ClickPanel(
-                state.click, { client.serverOffset }, client::send, { client.clockRtt },
+                live.click, { client.serverOffset }, client::send, { client.clockRtt },
                 clickAllowed = FEATURE_CLICK in features,
-                sequenceAvailable = FEATURE_SEQUENCES in features && songId != null && songId in sequences,
+                sequenceAvailable = FEATURE_SEQUENCES in features && liveSongId != null && liveSongId in sequences,
                 canControl = canControl, onNeedPin = onNeedPin, controls = showControls,
             )
         }
+        // En iPad, siguiendo al operador, el botón va en la fila del título (más espacio para la partitura).
+        val pickInTitle = wide && onView != null && browsing == null && !picking
+        if (onView != null && !pickInTitle) BrowseBar(browsing != null, picking, live.title,
+            onPick = { picking = true }, onCancel = { picking = false }, onLive = { browsing = null; picking = false })
+        if (picking && onView != null) {
+            SongPicker(plan, songs, liveSongId) { id ->
+                picking = false
+                browsing = if (id == liveSongId) null else id // el pedido al PC lo hace el LaunchedEffect de arriba
+            }
+        } else {
         if (wide) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(state.title.ifEmpty { "Esperando la canción…" }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge, maxLines = 1)
-                state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(state.title.ifEmpty { "Esperando la canción…" }, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                    state.currentLabel?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1) }
+                }
+                if (pickInTitle) OutlinedButton({ picking = true }) { Text("Ver otra canción") }
             }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -171,15 +232,78 @@ fun MusicianView(
                 autoChip()
             }
         }
-        when (view) {
-            MusicView.SCORE -> ScoreView(
-                client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null,
-                index = state.index, slideCount = state.slides.size, prefs = prefs, zoom = zoom, autoPages = autoPages,
-            )
-            MusicView.CHORDS -> ChordsView(state, transpose[songId] ?: 0) { songId?.let { id -> transpose[id] = it } }
-            MusicView.LYRICS -> LyricsView(state)
+        when {
+            loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(Modifier.width(24.dp)); Text("Cargando la canción…")
+            }
+            browsing != null && state.slides.isEmpty() ->
+                Text("No encontré esa canción en el computador (¿la borraron o le cambiaron el nombre?).", color = MaterialTheme.colorScheme.error)
+            else -> when (view) {
+                MusicView.SCORE -> ScoreView(
+                    client, score!!.file, if (score.instrument == GENERAL_INSTRUMENT && instrument != null) "No hay de $instrument: esta es para todos" else null,
+                    index = state.index, slideCount = state.slides.size, prefs = prefs, zoom = zoom, autoPages = autoPages,
+                )
+                MusicView.CHORDS -> ChordsView(state, transpose[songId] ?: 0) { songId?.let { id -> transpose[id] = it } }
+                MusicView.LYRICS -> LyricsView(state)
+            }
+        }
         }
     }
+    }
+}
+
+/** "Ver otra canción" mientras sigue al operador; "Volver a en vivo" mientras mira una por su cuenta. */
+@Composable
+private fun BrowseBar(browsing: Boolean, picking: Boolean, liveTitle: String, onPick: () -> Unit, onCancel: () -> Unit, onLive: () -> Unit) {
+    when {
+        picking -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Elige la canción que quieres ver", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            TextButton(onCancel) { Text("Cancelar") }
+        }
+        browsing -> Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Mirando por tu cuenta", fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    if (liveTitle.isNotEmpty()) Text(
+                        "En pantalla: $liveTitle", fontSize = 13.sp, maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                TextButton(onPick) { Text("Otra") }
+                Button(onLive) { Text("Volver a en vivo") }
+            }
+        }
+        else -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onPick) { Text("Ver otra canción") }
+        }
+    }
+}
+
+/** Elegir qué canción mirar: las de la lista del culto primero, y todas con un buscador. */
+@Composable
+private fun SongPicker(plan: ServicePlanState, songs: List<SongSummary>, liveSongId: String?, onChoose: (String) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val (inPlan, others) = musicianChoices(plan, songs, query)
+    OutlinedTextField(query, { query = it }, label = { Text("Buscar por título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (inPlan.isNotEmpty()) item { Text("Lista del culto", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+        items(inPlan, key = { "plan-" + it.id }) { SongChoice(it, it.id == liveSongId, onChoose) }
+        if (others.isNotEmpty()) item { Text("Todas las canciones", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp)) }
+        items(others, key = { it.id }) { SongChoice(it, it.id == liveSongId, onChoose) }
+        if (inPlan.isEmpty() && others.isEmpty()) item { Text("No hay canciones con ese nombre.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
+private fun SongChoice(song: SongSummary, live: Boolean, onChoose: (String) -> Unit) {
+    Card(
+        Modifier.fillMaxWidth().clickable { onChoose(song.id) },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(song.title + if (live) "  · en pantalla" else "", fontWeight = FontWeight.Medium, maxLines = 1)
+            if (song.firstLine.isNotEmpty()) Text(song.firstLine, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
     }
 }
 

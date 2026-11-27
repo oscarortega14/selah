@@ -26,6 +26,20 @@ class DemoServerTest {
     }
 
     @Test
+    fun aMusicianCanLookAtASongWithoutChangingTheScreen() {
+        val welcome = demo.welcome()
+        assertTrue(app.selah.shared.FEATURE_SONG_VIEW in welcome.one<ServerMessage.Library>().features)
+        val before = state(welcome)
+        val other = welcome.one<ServerMessage.Library>().songs.first { it.title != before.title }
+        val reply = demo.handle(ClientMessage.SongView(other.id))
+        val view = reply.one<ServerMessage.SongView>()
+        assertEquals(other.title, view.title)
+        assertTrue(view.slides.isNotEmpty())
+        assertTrue(reply.none { it is ServerMessage.State }) // la pantalla no cambió
+        assertTrue(demo.handle(ClientMessage.SongView("no-existe")).one<ServerMessage.SongView>().slides.isEmpty())
+    }
+
+    @Test
     fun nextPrevAndBlankWorkLikeThePc() {
         val start = state(demo.welcome())
         assertEquals(0, start.index)

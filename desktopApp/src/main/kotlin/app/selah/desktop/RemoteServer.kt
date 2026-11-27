@@ -338,6 +338,12 @@ class RemoteServer(
                             send(Frame.Text(ServerMessage.SongResults(msg.query, library.searchSongs(msg.query)).encode()))
                             continue
                         }
+                        if (msg is ClientMessage.SongView) {
+                            // El músico mira otra canción en su celular; el videobeam no cambia.
+                            val song = library.song(msg.id)
+                            send(Frame.Text(ServerMessage.SongView(msg.id, song?.title.orEmpty(), song?.slides.orEmpty()).encode()))
+                            continue
+                        }
                         if (msg is ClientMessage.BibleChapter) {
                             send(Frame.Text(bibleChapter(library, msg.book, msg.chapter).encode()))
                             continue
@@ -419,6 +425,7 @@ class RemoteServer(
         /** Lo que este PC ofrece además de lo básico: las apps solo muestran eso si aparece aquí. */
         fun serverFeatures(c: ChurchFeatures): List<String> = buildList {
             add(app.selah.shared.FEATURE_CAROUSEL)
+            add(app.selah.shared.FEATURE_SONG_VIEW)
             if (c.click) add(app.selah.shared.FEATURE_CLICK)
             if (c.sequences) add(app.selah.shared.FEATURE_SEQUENCES)
             if (c.scores) add(app.selah.shared.FEATURE_SCORES)

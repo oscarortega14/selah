@@ -213,6 +213,8 @@ fun main() {
                         sermons = catalog.sermons,
                         setTags = { id, tags -> runCatching { library.setSongTags(id, tags); null }.getOrElse { it.message ?: "No pude guardar el tipo" } },
                         openServices = { servicesOpen = true },
+                        saveList = { name, adds -> commands.plan.saveItems(name, adds) },
+                        savedItems = { name -> commands.plan.savedItems(name) },
                     )
                 }
                 val musicians = Musicians(

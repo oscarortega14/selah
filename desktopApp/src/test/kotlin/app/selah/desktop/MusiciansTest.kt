@@ -193,13 +193,13 @@ class MusiciansTest {
         assertEquals(Commands.OFF_CLICK, commands.handle(ClientMessage.StartClick(80)))
         assertEquals(Commands.OFF_CLICK, commands.handle(ClientMessage.RecordTiming(true)))
         assertTrue(output.played.isEmpty())
-        assertEquals(listOf("carousel"), RemoteServer.serverFeatures(ChurchFeatures()))
+        assertEquals(listOf("carousel", "songView"), RemoteServer.serverFeatures(ChurchFeatures()))
         assertEquals(
-            listOf("carousel", FEATURE_CLICK, FEATURE_SEQUENCES, FEATURE_SCORES, FEATURE_CHORDS),
+            listOf("carousel", "songView", FEATURE_CLICK, FEATURE_SEQUENCES, FEATURE_SCORES, FEATURE_CHORDS),
             RemoteServer.serverFeatures(ChurchFeatures.ALL),
         )
         // Solo secuencias: la app muestra el pulso y "▶ Secuencia", pero no ofrece el click suelto
-        assertEquals(listOf("carousel", FEATURE_SEQUENCES), RemoteServer.serverFeatures(ChurchFeatures(sequences = true)))
+        assertEquals(listOf("carousel", "songView", FEATURE_SEQUENCES), RemoteServer.serverFeatures(ChurchFeatures(sequences = true)))
     }
 
     @Test

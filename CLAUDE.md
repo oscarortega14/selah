@@ -110,6 +110,24 @@ MSIX 2.6.0 → Partner Center "Start update".
 Android: versionCode = a*10000+b*100+c (no se puede repetir en Play). iPhone: CURRENT_PROJECT_VERSION
 distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
 
+## Versión 3.1.0 (2026-11-26): planificar la semana y el músico navega libre
+- **Planificar la semana** (PC, pestaña Lista → "Planificar la semana…", `WeekPlanDialog` en `ServicesUi.kt`): los cultos
+  de los próximos 7 días (`upcomingServices`); cada uno abre su plantilla con selects (`PrepareServiceDialog` con `date`)
+  y se guarda como lista con nombre ("Domingo 29 nov", `plannedListName`) SIN tocar la lista de ahora
+  (`ServicePlan.saveItems`/`savedItems`). `WorshipService.planned` (fecha → lista, máx. 30 en `ServicesStore`) y
+  `listFor(fecha)`: ese día la planeada gana a la rotación (aviso del PC y `Plan.todayList` de la app). No repite canciones
+  de los otros cultos de la semana. "Cambiar…" reabre lo planeado (`matchStepsToItems`).
+- **Músico navega libre** (app): "Ver otra canción" en el modo músico (`MusicianView`, `musicianShown`, `musicianChoices`:
+  lista del culto primero + buscador). Protocolo: `ClientMessage.SongView(id)` → `ServerMessage.SongView(id, title, slides)`
+  solo a quien pidió, sin permiso (solo lectura, como SongSearch; también en `PinGuard.isReadOnly`), `FEATURE_SONG_VIEW`
+  en Library.features (PC viejo: el botón no sale). El videobeam no cambia; si el operador proyecta la que está mirando,
+  vuelve a seguirlo. El estado (`musicianBrowsing`) vive en `RemoteApp` para que un corte de Wi-Fi no lo devuelva a en vivo.
+- Pruebas que tocan la interfaz con `compose.uiTest`: `WeekPlanUiTest` (clics y capturas sobre una COPIA de una carpeta Selah,
+  `SELAH_SEMANA_DIR`/`SELAH_SEMANA_OUT`) y `PhoneE2ETool` (servidor sin ventanas en otro puerto que aprueba celulares como
+  músico; emulador con `adb reverse tcp:8765 tcp:8785` y dirección 127.0.0.1; en la Mac el 8775 es de la memoria).
+- Probado (2026-11-26): ventana real del PC con 164 canciones y 2 cultos reales; emulador Android en tamaño tableta y celular
+  (seguir, mirar otra con la Biblia en pantalla, volver, volver solo, corte y reconexión). Falta: iPad real, Windows.
+
 ## Versión 3.0.1 (2026-11-24): iPad y tablets, desplazamiento automático en el PC
 - 3.0.0 aprobada en Microsoft Store, App Store y Google Play (2026-11-23).
 - **iPad**: `TARGETED_DEVICE_FAMILY "1,2"` (app universal, un solo build). Desde `WIDE` = 800 dp de ancho

@@ -44,7 +44,7 @@ enum class Permission {
 /** El permiso que pide cada orden; null = cualquiera puede (preguntar, buscar, presentarse). */
 fun ClientMessage.requiredPermission(): Permission? = when (this) {
     is ClientMessage.Hello, is ClientMessage.Login, is ClientMessage.Ping,
-    is ClientMessage.BibleSearch, is ClientMessage.SongSearch, is ClientMessage.BibleChapter,
+    is ClientMessage.BibleSearch, is ClientMessage.SongSearch, is ClientMessage.BibleChapter, is ClientMessage.SongView,
     -> null
     is ClientMessage.PlanAddSong, is ClientMessage.PlanAddBible, is ClientMessage.PlanRemove, is ClientMessage.PlanMove,
     is ClientMessage.PlanGo, ClientMessage.PlanNext, ClientMessage.PlanClear, is ClientMessage.PlanSave, is ClientMessage.PlanOpen,

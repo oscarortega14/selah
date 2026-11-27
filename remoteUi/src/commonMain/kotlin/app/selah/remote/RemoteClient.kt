@@ -132,6 +132,10 @@ class RemoteClient(private val scope: CoroutineScope) {
     private val _bibleBooks = MutableStateFlow<List<BibleBookInfo>>(emptyList())
     val bibleBooks: StateFlow<List<BibleBookInfo>> = _bibleBooks.asStateFlow()
 
+    /** Última canción pedida con [ClientMessage.SongView] (el músico mirando otra canción). */
+    private val _songView = MutableStateFlow<ServerMessage.SongView?>(null)
+    val songView: StateFlow<ServerMessage.SongView?> = _songView.asStateFlow()
+
     /** Último capítulo pedido con [ClientMessage.BibleChapter]. */
     private val _bibleChapter = MutableStateFlow<ServerMessage.BibleChapter?>(null)
     val bibleChapter: StateFlow<ServerMessage.BibleChapter?> = _bibleChapter.asStateFlow()
@@ -206,7 +210,7 @@ class RemoteClient(private val scope: CoroutineScope) {
         _announcements.value = emptyList(); _presentations.value = emptyList(); _sermons.value = emptyList()
         _bibleNames.value = emptyList(); _secondBible.value = null; _features.value = emptyList()
         _scores.value = emptyList(); _sequences.value = emptyList()
-        _plan.value = ServicePlanState(); _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
+        _plan.value = ServicePlanState(); _songView.value = null; _savedLists.value = emptyList(); _today.value = "" to null; _repeatDays.value = 0
         _auth.value = null
         clock.reset()
     }
@@ -375,6 +379,7 @@ class RemoteClient(private val scope: CoroutineScope) {
                 _secondBible.value = m.secondBible
             }
             is ServerMessage.BibleChapter -> _bibleChapter.value = m
+            is ServerMessage.SongView -> _songView.value = m
             is ServerMessage.State -> {
                 clock.roughFromState(m.serverNow, nowMillis())
                 _state.value = app.selah.shared.mergeState(_state.value, m)

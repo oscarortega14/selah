@@ -94,6 +94,11 @@ internal fun RemoteApp(
     val bibleChapter by client.bibleChapter.collectAsState()
     val scores by client.scores.collectAsState()
     val sequences by client.sequences.collectAsState()
+    val songView by client.songView.collectAsState()
+    // La canción que el músico mira por su cuenta: aquí arriba para que un corte del Wi-Fi no lo devuelva a en vivo.
+    val musicianBrowsing = rememberSaveable { mutableStateOf<String?>(null) }
+    // Ver otra canción sin proyectarla: solo con un PC que lo entiende.
+    val viewSong: ((String) -> Unit)? = if (app.selah.shared.FEATURE_SONG_VIEW in features) { id -> client.send(ClientMessage.SongView(id)) } else null
     // Quién usa este celular: "operador" (controla todo) o "musico" (ve lo suyo); null = todavía no eligió.
     var role by remember { mutableStateOf(store?.get("rol")) }
     var instrument by remember { mutableStateOf(store?.get("instrumento")?.ifEmpty { null }) }
@@ -179,6 +184,7 @@ internal fun RemoteApp(
                     onNeedPin = { if (!rolesOnPc) musicianWantsPin = true },
                     prefs = store, suggestedInstrument = auth?.instrument.takeIf { rolesOnPc },
                     showControls = !rolesOnPc || pcRole?.can(app.selah.shared.Permission.MUSIC) == true,
+                    songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing,
                 )
             }
         } else {
@@ -227,6 +233,7 @@ internal fun RemoteApp(
                         client, state, features, scores, sequences, instrument,
                         onInstrument = { i -> instrument = i; store?.put("instrumento" to i.orEmpty()) },
                         canControl = !needsPin, onNeedPin = { pinDismissed = false }, prefs = store,
+                        songs = songs, plan = plan, viewed = songView, onView = viewSong, browsingState = musicianBrowsing,
                     )
                 }
             }

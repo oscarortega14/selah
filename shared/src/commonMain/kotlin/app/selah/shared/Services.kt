@@ -18,6 +18,7 @@ data class ServiceStep(val kind: StepKind, val tag: String = "")
 /**
  * Un culto: "Dominical", el domingo (día 7; lunes = 1) a las "9:00".
  * [rotation]: listas guardadas que se turnan; [lastUsed]: la última que se abrió (la siguiente es la que toca).
+ * [planned]: la lista preparada para una fecha ("2026-11-29" → "Domingo 29 nov"), desde "Planificar la semana".
  */
 @Serializable
 data class WorshipService(
@@ -27,7 +28,12 @@ data class WorshipService(
     val steps: List<ServiceStep> = emptyList(),
     val rotation: List<String> = emptyList(),
     val lastUsed: String? = null,
+    val planned: Map<String, String> = emptyMap(),
 ) {
+    /** La lista de ese día ([date] "2026-11-29"): la planeada si todavía existe; si no, la que toca en la rotación. */
+    fun listFor(date: String, saved: Collection<String>): String? =
+        planned[date]?.let { p -> saved.firstOrNull { it == p } ?: saved.firstOrNull { it.equals(p, ignoreCase = true) } } ?: nextList(saved)
+
     /** "Dominical · domingo 9:00" */
     val label: String get() = name + " · " + (DAY_NAMES.getOrNull(day - 1) ?: "") + if (time.isBlank()) "" else " $time"
 

@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import app.selah.shared.ClientMessage
 import app.selah.shared.DAY_NAMES
+import app.selah.shared.PlanItem
+import app.selah.shared.PlanKind
 import app.selah.shared.ServiceStep
 import app.selah.shared.ServicesConfig
 import app.selah.shared.SongSummary
@@ -71,6 +73,10 @@ class Worship(
     /** Cambia la línea "Tipo:" de una canción; devuelve un error o null. */
     val setTags: (id: String, tags: List<String>) -> String?,
     val openServices: () -> Unit,
+    /** Guarda una lista con nombre sin tocar la de ahora (órdenes "+ Lista"); devuelve un error o null. */
+    val saveList: (name: String, adds: List<ClientMessage>) -> String? = { _, _ -> "No disponible" },
+    /** Lo que tiene una lista guardada (null si no existe). */
+    val savedItems: (name: String) -> List<PlanItem>? = { null },
 ) {
     /** Tipos para elegir: los de siempre más los que ya usan las canciones. */
     val knownTags: List<String> by lazy {
@@ -134,7 +140,7 @@ fun TodayServiceBanner(worship: Worship, onOpenList: (String) -> Unit, onPrepare
         TextButton(worship.openServices, Modifier.hand()) { Text(if (worship.config.services.isEmpty()) "Configurar los cultos de la iglesia…" else "Cultos…") }
         return
     }
-    val next = service.nextList(worship.savedLists)
+    val next = service.listFor(LocalDate.now().toString(), worship.savedLists)
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -158,13 +164,81 @@ private class Choice(val step: ServiceStep, val label: String) {
  * Asistente "Preparar desde la plantilla": un renglón por paso, con canciones sugeridas (las de ese tipo que
  * llevan más tiempo sin cantarse). Al crear, reemplaza la lista del culto actual.
  */
+/** Las órdenes "+ Lista" de lo elegido, en el orden de la plantilla. */
+private fun List<Choice>.adds(): List<ClientMessage> = filter { it.include }.mapNotNull { c ->
+    val id = c.songId
+    when (c.step.kind) {
+        StepKind.SONG -> id?.let { ClientMessage.PlanAddSong(it) }
+        StepKind.BIBLE -> c.text.trim().takeIf { it.isNotEmpty() }?.let { ClientMessage.PlanAddBible(it) }
+        StepKind.ANNOUNCEMENT -> id?.let { ClientMessage.PlanAddMedia(it) }
+        StepKind.SERMON -> id?.let { ClientMessage.PlanAddSermon(it) }
+    }
+}
+
+/**
+ * Qué elemento de una lista ya planeada va en cada paso de la plantilla: en orden, el siguiente del mismo tipo
+ * (canción con canción, lectura con lectura…). null = ese paso no tiene nada.
+ */
+fun matchStepsToItems(steps: List<ServiceStep>, items: List<PlanItem>): List<PlanItem?> {
+    val left = items.toMutableList()
+    return steps.map { step ->
+        val kind = when (step.kind) {
+            StepKind.SONG -> PlanKind.SONG
+            StepKind.BIBLE -> PlanKind.BIBLE
+            StepKind.ANNOUNCEMENT -> PlanKind.MEDIA
+            StepKind.SERMON -> PlanKind.SERMON
+        }
+        left.firstOrNull { it.kind == kind }?.also { left.remove(it) }
+    }
+}
+
+/** Los cultos de los próximos [days] días desde [from] (hoy incluido): índice del culto y fecha, en orden. */
+fun upcomingServices(cfg: ServicesConfig, from: LocalDate, days: Int = 7): List<Pair<Int, LocalDate>> =
+    (0 until days).flatMap { k ->
+        val d = from.plusDays(k.toLong())
+        cfg.services.withIndex().filter { it.value.day == d.dayOfWeek.value }
+            .sortedBy { app.selah.shared.parseMinutes(it.value.time) ?: 0 }
+            .map { it.index to d }
+    }
+
+/** Nombre de la lista planeada: "Domingo 29 nov". */
+fun plannedListName(service: WorshipService, date: LocalDate): String = "${service.name} ${date.dayOfMonth} ${MONTHS[date.monthValue - 1]}"
+
+/** "domingo 29 nov" */
+private fun dayText(date: LocalDate) = "${DAY_NAMES[date.dayOfWeek.value - 1]} ${date.dayOfMonth} ${MONTHS[date.monthValue - 1]}"
+
+/**
+ * Asistente de la plantilla: un renglón por paso, con selects y canciones sugeridas (las de ese tipo que llevan
+ * más tiempo sin cantarse, sin repetir las de [exclude]). Sin [date] arma la lista de ahora (reemplaza la actual);
+ * con [date] la guarda con nombre para ese día ("Planificar la semana") sin tocar la de ahora.
+ */
 @Composable
-fun PrepareServiceDialog(service: WorshipService, worship: Worship, send: (ClientMessage) -> Unit, onClose: () -> Unit) {
-    val choices = remember(service) {
+fun PrepareServiceDialog(
+    service: WorshipService,
+    worship: Worship,
+    send: (ClientMessage) -> Unit,
+    date: LocalDate? = null,
+    exclude: Set<String> = emptySet(),
+    onSaved: (listName: String) -> Unit = {},
+    onClose: () -> Unit,
+) {
+    val existingName = date?.let { service.planned[it.toString()] }
+    var name by remember(service, date) { mutableStateOf(existingName ?: date?.let { plannedListName(service, it) }.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val choices = remember(service, date) {
         val labels = service.stepLabels()
-        val used = mutableSetOf<String>()
+        val existing = existingName?.let(worship.savedItems)?.let { matchStepsToItems(service.steps, it) }
+        val used = exclude.toMutableSet()
         service.steps.mapIndexed { i, step ->
             Choice(step, labels[i]).also { c ->
+                if (existing != null) {
+                    // Ya estaba planeado: se abre con lo que tenía, para cambiar solo lo que haga falta.
+                    val item = existing[i]
+                    if (step.kind == StepKind.BIBLE) c.text = item?.ref.orEmpty() else c.songId = item?.ref
+                    c.include = item != null
+                    c.songId?.let { used += it }
+                    return@also
+                }
                 if (step.kind == StepKind.SONG) {
                     c.songId = suggestSongs(worship.songs, step.tag, used).firstOrNull()?.id?.also { used += it }
                 }
@@ -177,34 +251,107 @@ fun PrepareServiceDialog(service: WorshipService, worship: Worship, send: (Clien
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.width(640.dp),
-        title = { Text("Preparar: ${service.label}") },
+        title = { Text(if (date == null) "Preparar: ${service.label}" else "${service.name} · ${dayText(date)}") },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    "Selah propone las canciones de cada tipo que llevan más tiempo sin cantarse. Cambia lo que quieras; " +
-                        "al crearla reemplaza la lista del culto actual (guárdala antes si la necesitas).",
+                    if (date == null) "Selah propone las canciones de cada tipo que llevan más tiempo sin cantarse. Cambia lo que quieras; " +
+                        "al crearla reemplaza la lista del culto actual (guárdala antes si la necesitas)."
+                    else "Elige qué va en cada parte del culto. Selah propone las que llevan más tiempo sin cantarse y no repite " +
+                        "las de los otros cultos de la semana. Se guarda como lista y ese día aparece lista para abrir.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (date != null) {
+                    OutlinedTextField(name, { name = it.take(60); error = null }, label = { Text("Nombre de la lista") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
                 for (c in choices) ChoiceRow(c, worship, choices)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             Button({
-                send(ClientMessage.PlanClear)
-                for (c in choices.filter { it.include }) {
-                    val id = c.songId
-                    when (c.step.kind) {
-                        StepKind.SONG -> id?.let { send(ClientMessage.PlanAddSong(it)) }
-                        StepKind.BIBLE -> c.text.trim().takeIf { it.isNotEmpty() }?.let { send(ClientMessage.PlanAddBible(it)) }
-                        StepKind.ANNOUNCEMENT -> id?.let { send(ClientMessage.PlanAddMedia(it)) }
-                        StepKind.SERMON -> id?.let { send(ClientMessage.PlanAddSermon(it)) }
-                    }
+                val adds = choices.adds()
+                if (date == null) {
+                    send(ClientMessage.PlanClear)
+                    adds.forEach(send)
+                    onClose()
+                } else {
+                    error = worship.saveList(name, adds)
+                    if (error == null) { onSaved(app.selah.shared.cleanListName(name) ?: name); onClose() }
                 }
-                onClose()
-            }) { Text("Crear la lista") }
+            }, Modifier.hand()) { Text(if (date == null) "Crear la lista" else "Guardar") }
         },
         dismissButton = { TextButton(onClose) { Text("Cancelar") } },
     )
+}
+
+/**
+ * "Planificar la semana": los cultos de los próximos 7 días, cada uno con su plantilla. Se eligen las canciones
+ * una vez y el día del culto la lista aparece en el aviso de arriba ("Abrir «Domingo 29 nov» (le toca hoy)").
+ */
+@Composable
+fun WeekPlanDialog(worship: Worship, send: (ClientMessage) -> Unit, onClose: () -> Unit) {
+    val today = remember { LocalDate.now() }
+    val cfg = worship.config
+    val week = upcomingServices(cfg, today)
+    var editing by remember { mutableStateOf<Pair<Int, LocalDate>?>(null) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        modifier = Modifier.width(640.dp),
+        title = { Text("Planificar la semana") },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (week.isEmpty()) {
+                    Text("No hay cultos configurados. Agrégalos en Cultos… con su día, hora y plantilla.")
+                    TextButton({ onClose(); worship.openServices() }, Modifier.hand()) { Text("Abrir Cultos…") }
+                }
+                for ((i, date) in week) {
+                    val s = cfg.services[i]
+                    val planned = s.planned[date.toString()]?.takeIf { p -> worship.savedLists.any { it.equals(p, ignoreCase = true) } }
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                Text("${s.name} · ${dayText(date)}" + if (s.time.isBlank()) "" else " · ${s.time}", fontWeight = FontWeight.Medium)
+                                Text(
+                                    when {
+                                        s.steps.isEmpty() -> "Sin plantilla: ármala en Cultos…"
+                                        planned != null -> "✓ Lista: «$planned»"
+                                        else -> "Sin planear"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (planned != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (planned != null) TextButton({ send(ClientMessage.PlanOpen(planned)); onClose() }, Modifier.hand()) { Text("Abrir ahora") }
+                            if (s.steps.isNotEmpty()) {
+                                if (planned != null) OutlinedButton({ editing = i to date }, Modifier.hand()) { Text("Cambiar…") }
+                                else Button({ editing = i to date }, Modifier.hand()) { Text("Elegir canciones…") }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClose, Modifier.hand()) { Text("Listo") } },
+        dismissButton = { TextButton({ onClose(); worship.openServices() }, Modifier.hand()) { Text("Cultos y plantillas…") } },
+    )
+    val current = editing
+    val s = current?.let { cfg.services.getOrNull(it.first) }
+    if (current != null && s != null) {
+        val (i, date) = current
+        // No repetir lo que ya se planeó para los otros cultos de la semana.
+        val others = week.filter { it != (i to date) }.flatMap { (j, d) ->
+            cfg.services[j].planned[d.toString()]?.let(worship.savedItems).orEmpty().filter { it.kind == PlanKind.SONG }.map { it.ref }
+        }.toSet()
+        PrepareServiceDialog(
+            s, worship, send, date = date, exclude = others,
+            onSaved = { list ->
+                worship.update { c ->
+                    c.copy(services = c.services.mapIndexed { k, svc -> if (k == i) svc.copy(planned = svc.planned + (date.toString() to list)) else svc })
+                }
+            },
+        ) { editing = null }
+    }
 }
 
 @Composable
@@ -333,7 +480,12 @@ private fun ServiceCard(s: WorshipService, worship: Worship, onChange: (WorshipS
             // Rotación
             Text("Listas en rotación (se turnan en orden alfabético)", style = MaterialTheme.typography.titleSmall)
             if (worship.savedLists.isEmpty()) {
-                Text("Todavía no hay listas guardadas. Arma una lista y toca \"Guardar…\" (ej. \"${s.name} A\").", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Todavía no hay listas guardadas. Lo más fácil: en la ventana principal, pestaña Lista, toca " +
+                        "\"Planificar la semana…\" y elige las canciones de cada culto con esta plantilla. " +
+                        "Si prefieres listas fijas que se turnen, guárdalas (ej. \"${s.name} A\") y márcalas aquí.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             val next = s.nextList(worship.savedLists)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -100,4 +100,17 @@ class ServicesTest {
         // "Tipo:" dentro de la letra (después de la primera estrofa) sí es letra
         assertEquals(2, SongParser.parse("y", "# T\n\nuno\n\nTipo: algo\n").slides.size)
     }
+
+    @Test
+    fun thePlannedListOfThatDayWinsOverTheRotation() {
+        val s = WorshipService("Domingo", 7, rotation = listOf("A", "B"), lastUsed = "A", planned = mapOf("2026-11-29" to "Domingo 29 nov"))
+        assertEquals("Domingo 29 nov", s.listFor("2026-11-29", listOf("A", "B", "Domingo 29 nov")))
+        assertEquals("domingo 29 NOV", s.listFor("2026-11-29", listOf("A", "B", "domingo 29 NOV"))) // sin importar mayúsculas
+        // Otro día, o si la borraron: la rotación de siempre
+        assertEquals("B", s.listFor("2026-12-06", listOf("A", "B")))
+        assertEquals("B", s.listFor("2026-11-29", listOf("A", "B")))
+        // Un cultos.json viejo (sin "planned") se sigue leyendo
+        val old = ProtocolJson.decodeFromString(ServicesConfig.serializer(), """{"services":[{"name":"D","day":7}]}""")
+        assertEquals(emptyMap(), old.services[0].planned)
+    }
 }

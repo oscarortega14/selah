@@ -59,6 +59,7 @@ object NetGuard {
         is ClientMessage.StartCountdown -> msg.copy(text = msg.text.take(MAX_TEXT))
         is ClientMessage.BibleSearch -> msg.copy(query = msg.query.take(MAX_TEXT))
         is ClientMessage.SongSearch -> msg.copy(query = msg.query.take(MAX_TEXT))
+        is ClientMessage.SongView -> msg.copy(id = msg.id.take(MAX_TEXT))
         is ClientMessage.ShowBible -> msg.copy(reference = msg.reference.take(MAX_TEXT))
         is ClientMessage.PlanAddBible -> msg.copy(reference = msg.reference.take(MAX_TEXT))
         is ClientMessage.ShowPresentation -> msg.copy(name = msg.name.take(MAX_TEXT))

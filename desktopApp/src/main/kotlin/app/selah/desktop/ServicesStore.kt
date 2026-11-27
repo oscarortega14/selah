@@ -19,7 +19,7 @@ class ServicesStore(private val file: File) {
             c.copy(
                 repeatDays = c.repeatDays.coerceIn(0, 365),
                 services = c.services.take(MAX_SERVICES).map { s ->
-                    s.copy(name = s.name.trim().take(60), day = s.day.coerceIn(1, 7), time = s.time.trim().take(20), steps = s.steps.take(40), rotation = s.rotation.distinct().take(20))
+                    s.copy(name = s.name.trim().take(60), day = s.day.coerceIn(1, 7), time = s.time.trim().take(20), steps = s.steps.take(40), rotation = s.rotation.distinct().take(20), planned = s.planned.entries.sortedByDescending { it.key }.take(MAX_PLANNED).associate { it.key to it.value })
                 },
             )
         }
@@ -47,13 +47,15 @@ class ServicesStore(private val file: File) {
 
     companion object {
         const val MAX_SERVICES = 20
+        /** Fechas planeadas que se recuerdan por culto (las más nuevas; unos meses de cultos semanales). */
+        const val MAX_PLANNED = 30
     }
 }
 
 /** El culto de hoy ("Dominical · domingo 9:00") y la lista que le toca en su rotación (si tiene). */
 fun todaySuggestion(cfg: app.selah.shared.ServicesConfig, saved: Collection<String>, now: java.time.LocalDateTime): Pair<String, String?> {
     val service = cfg.serviceFor(now.dayOfWeek.value, now.hour * 60 + now.minute) ?: return "" to null
-    return service.label to service.nextList(saved)
+    return service.label to service.listFor(now.toLocalDate().toString(), saved)
 }
 
 /** Las canciones con la fecha en que se cantaron por última vez ("2026-11-02"). */

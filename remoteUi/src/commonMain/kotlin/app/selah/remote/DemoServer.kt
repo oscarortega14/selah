@@ -60,7 +60,7 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             announcements = announcements,
             bibleNames = listOf(bible.name),
             presentations = presentations,
-            features = listOf(FEATURE_CAROUSEL, FEATURE_CLICK),
+            features = listOf(FEATURE_CAROUSEL, FEATURE_CLICK, app.selah.shared.FEATURE_SONG_VIEW),
         ),
         planMessage(),
         stateMessage(),
@@ -120,6 +120,10 @@ internal class DemoServer(private val clock: () -> Long = ::nowMillis) {
             is ClientMessage.PlanOpen -> saved[msg.name]?.let { plan = it.copy(current = -1); null } ?: "No encontré la lista \"${msg.name}\""
 
             is ClientMessage.SongSearch -> return listOf(ServerMessage.SongResults(msg.query, searchSongsFull(songs, msg.query)))
+            is ClientMessage.SongView -> {
+                val song = songs.find { it.id == msg.id }
+                return listOf(ServerMessage.SongView(msg.id, song?.title.orEmpty(), song?.slides.orEmpty()))
+            }
             is ClientMessage.BibleSearch -> {
                 val (hits, total) = bible.search(msg.query)
                 return listOf(ServerMessage.BibleResults(msg.query, hits, total))

@@ -209,6 +209,13 @@ sealed interface ClientMessage {
     /** Pedir el texto de un capítulo (para el explorador); responde con ServerMessage.BibleChapter. */
     @Serializable @SerialName("bible_chapter")
     data class BibleChapter(val book: String, val chapter: Int) : ClientMessage
+
+    /**
+     * Ver una canción en este celular sin ponerla en pantalla (el músico navega por su cuenta); responde con
+     * ServerMessage.SongView solo a quien la pidió. Solo a un PC que anuncia [FEATURE_SONG_VIEW].
+     */
+    @Serializable @SerialName("song_view")
+    data class SongView(val id: String) : ClientMessage
 }
 
 /** Un libro de la Biblia y cuántos capítulos tiene (para el explorador de los remotos). */
@@ -294,6 +301,10 @@ sealed interface ServerMessage {
         val todayList: String? = null,
     ) : ServerMessage
 
+    /** Respuesta a [ClientMessage.SongView]: la letra (con acordes) de esa canción; [slides] vacío = no existe. */
+    @Serializable @SerialName("song_view")
+    data class SongView(val id: String, val title: String = "", val slides: List<Slide> = emptyList()) : ServerMessage
+
     @Serializable @SerialName("error")
     data class Error(val message: String) : ServerMessage
 
@@ -338,6 +349,9 @@ const val FEATURE_SEQUENCES = "sequences"
 
 /** Capacidad del PC (Library.features): entiende StartCarousel/StopCarousel. */
 const val FEATURE_CAROUSEL = "carousel"
+
+/** Capacidad del PC (Library.features): un celular puede ver cualquier canción sin proyectarla ([ClientMessage.SongView]). */
+const val FEATURE_SONG_VIEW = "songView"
 
 /** Segundos por imagen que se proponen al iniciar un carrusel. Se aceptan de [CAROUSEL_MIN_SECONDS] a [CAROUSEL_MAX_SECONDS]. */
 const val CAROUSEL_SECONDS_DEFAULT = 8
