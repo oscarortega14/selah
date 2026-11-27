@@ -26,6 +26,10 @@ class PhoneE2ETool {
         // SELAH_E2E_ROLE=OPERATOR|MUSICIAN|DIRECTOR: el papel de los celulares (los ya aprobados también cambian).
         val role = System.getenv("SELAH_E2E_ROLE")?.let { Role.valueOf(it) } ?: Role.MUSICIAN
         team.team.value.members.forEach { m -> team.update(m.idHash) { it.copy(role = role) } }
+        // SELAH_E2E_NAME: el nombre del computador que ven los celulares (para capturas: "PC-IGLESIA").
+        System.getenv("SELAH_E2E_NAME")?.let { name ->
+            RemoteServer::class.java.getDeclaredField("displayName").apply { isAccessible = true }.set(server, name)
+        }
         server.start()
         println("E2E: Selah escuchando en el puerto $port")
         val end = System.currentTimeMillis() + seconds * 1000
