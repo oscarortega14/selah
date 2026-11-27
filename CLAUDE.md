@@ -140,8 +140,9 @@ distinto en cada subida (p. ej. 20600, 20601… dentro de la misma versión).
 - Publicado (2026-11-26): GitHub Release v3.1.0 (latest) con `Selah-3.1.0.dmg` y `SelahRemoto.apk` (30100, firma 7B:EE…,
   probado con R8 en el emulador). Listos en `~/Desktop/Selah 3.1.0/` para que el dueño los suba: AAB 30100 (Google Play),
   `SelahRemoto-3.1.0-30100.ipa`; el build 3.1.0 (30100) ya se SUBIÓ a App Store Connect desde la terminal
-  (`-exportArchive` con `destination=upload`; falta crear la versión 3.1.0 y enviarla a revisión) y `Que hay de nuevo.txt`. Falta: `.msi` + `.msi.sig` al Release y MSIX a Microsoft Store desde
-  el PC con Windows.
+  (`-exportArchive` con `destination=upload`; falta crear la versión 3.1.0 y enviarla a revisión) y `Que hay de nuevo.txt`. El PC con Windows subió `Selah-3.1.0.msi` + `.msi.sig` al Release
+  (FIRMA VÁLIDA verificada desde la Mac con la clave pública de `Updater.kt`). Enviada a revisión en App Store (30100),
+  Google Play (30100) y Microsoft Store (MSIX) el 2026-11-26.
 
 ## Versión 3.0.1 (2026-11-24): iPad y tablets, desplazamiento automático en el PC
 - 3.0.0 aprobada en Microsoft Store, App Store y Google Play (2026-11-23).
